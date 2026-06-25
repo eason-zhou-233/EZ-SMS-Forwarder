@@ -284,6 +284,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _isBatteryOptimized = false;
   bool _isServiceRunning = false;
   bool _smsPermissionGranted = false;
+  bool _notificationPermissionGranted = false;
   String _pushToken = '';
   final TextEditingController _tokenController = TextEditingController();
 
@@ -306,6 +307,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       // 从后台（包括设置页）返回前台时重新检查权限
       _checkSmsPermission();
+      _checkNotificationPermission();
       _checkBatteryOptimization();
     }
   }
@@ -331,6 +333,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       }
 
       _checkSmsPermission();
+      _checkNotificationPermission();
 
       Telephony.instance.listenIncomingSms(
         onNewMessage: (msg) => processSms(msg),
@@ -369,6 +372,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Future<void> _openSmsSettings() async {
     await openAppSettings();
     _checkSmsPermission();
+  }
+
+  Future<void> _checkNotificationPermission() async {
+    final status = await Permission.notification.status;
+    if (mounted) {
+      setState(() => _notificationPermissionGranted = status.isGranted);
+    }
   }
 
   Future<void> _checkBatteryOptimization() async {
@@ -661,6 +671,31 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       ),
       body: Column(
         children: [
+          if (!_notificationPermissionGranted)
+            Container(
+              width: double.infinity,
+              color: Colors.orange.shade100,
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+              child: Row(
+                children: [
+                  const Icon(Icons.info, color: Colors.orange, size: 20),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      "通知权限未授予，后台服务可能无法正常运行",
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () async {
+                      await openAppSettings();
+                      _checkNotificationPermission();
+                    },
+                    child: const Text("去设置", style: TextStyle(fontSize: 12)),
+                  ),
+                ],
+              ),
+            ),
           if (!_smsPermissionGranted)
             Container(
               width: double.infinity,
@@ -718,7 +753,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   const Icon(Icons.info, color: Colors.orange),
                   const SizedBox(width: 8),
                   const Expanded(
-                    child: Text("建议开启保活以防服务中断", style: TextStyle(fontSize: 12)),
+                    child: Text(
+                      "请将电池优化策略设为「无限制」以防止后台运行时被系统关闭进程",
+                      style: TextStyle(fontSize: 12),
+                    ),
                   ),
                   TextButton(
                     onPressed: () async {
