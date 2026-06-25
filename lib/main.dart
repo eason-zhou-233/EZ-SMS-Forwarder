@@ -480,16 +480,25 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _showAddRuleDialog() {
-    final numCtrl = TextEditingController();
-    final keyCtrl = TextEditingController();
-    String numberMatchType = '精确匹配';
-    String keywordMatchType = '包含';
+    _showRuleDialog();
+  }
+
+  void _showRuleDialog({int? editIndex}) {
+    final isEdit = editIndex != null;
+    final existingRule = isEdit ? _rules[editIndex] : null;
+
+    final numCtrl = TextEditingController(
+      text: existingRule?.targetNumber ?? '',
+    );
+    final keyCtrl = TextEditingController(text: existingRule?.keyword ?? '');
+    String numberMatchType = existingRule?.numberMatchType ?? '精确匹配';
+    String keywordMatchType = existingRule?.keywordMatchType ?? '包含';
 
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: const Text('新增转发规则'),
+          title: Text(isEdit ? '编辑转发规则' : '新增转发规则'),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -545,20 +554,23 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             ElevatedButton(
               onPressed: () {
-                setState(
-                  () => _rules.add(
-                    ForwardRule(
-                      targetNumber: numCtrl.text.trim(),
-                      keyword: keyCtrl.text.trim(),
-                      numberMatchType: numberMatchType,
-                      keywordMatchType: keywordMatchType,
-                    ),
-                  ),
+                final newRule = ForwardRule(
+                  targetNumber: numCtrl.text.trim(),
+                  keyword: keyCtrl.text.trim(),
+                  numberMatchType: numberMatchType,
+                  keywordMatchType: keywordMatchType,
                 );
+                setState(() {
+                  if (isEdit) {
+                    _rules[editIndex] = newRule;
+                  } else {
+                    _rules.add(newRule);
+                  }
+                });
                 _saveRules();
                 Navigator.pop(context);
               },
-              child: const Text('添加'),
+              child: Text(isEdit ? '保存' : '添加'),
             ),
           ],
         ),
@@ -698,38 +710,67 @@ class _HomeScreenState extends State<HomeScreen> {
                           horizontal: 16,
                           vertical: 8,
                         ),
-                        child: ListTile(
-                          title: Text(
-                            rule.targetNumber.isEmpty
-                                ? "监听号码: 所有号码"
-                                : "监听号码: ${rule.targetNumber}",
-                            style: const TextStyle(fontSize: 15),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
                           ),
-                          subtitle: Padding(
-                            padding: const EdgeInsets.only(top: 6),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  "号码匹配规则: ${rule.numberMatchType}",
-                                  style: const TextStyle(fontSize: 13),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      rule.targetNumber.isEmpty
+                                          ? "监听号码: 所有号码"
+                                          : "监听号码: ${rule.targetNumber}",
+                                      style: const TextStyle(fontSize: 15),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      "号码匹配规则: ${rule.numberMatchType}",
+                                      style: const TextStyle(fontSize: 13),
+                                    ),
+                                    Text(
+                                      "关键词匹配规则: ${rule.keywordMatchType}",
+                                      style: const TextStyle(fontSize: 13),
+                                    ),
+                                    Text(
+                                      rule.keyword.isEmpty
+                                          ? "关键词: 所有内容"
+                                          : "关键词: ${rule.keyword}",
+                                      style: const TextStyle(fontSize: 13),
+                                    ),
+                                  ],
                                 ),
-                                Text(
-                                  rule.keyword.isEmpty
-                                      ? "关键词匹配规则: ${rule.keywordMatchType} (匹配所有内容)"
-                                      : "关键词匹配规则: ${rule.keywordMatchType} | 匹配关键词: ${rule.keyword}",
-                                  style: const TextStyle(fontSize: 13),
-                                ),
-                              ],
-                            ),
-                          ),
-                          isThreeLine: true,
-                          trailing: IconButton(
-                            icon: const Icon(
-                              Icons.delete_outline,
-                              color: Colors.red,
-                            ),
-                            onPressed: () => _confirmDelete(index),
+                              ),
+                              const SizedBox(width: 8),
+                              Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  InkWell(
+                                    onTap: () =>
+                                        _showRuleDialog(editIndex: index),
+                                    child: const Icon(
+                                      Icons.edit_outlined,
+                                      color: Colors.blue,
+                                      size: 24,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  InkWell(
+                                    onTap: () => _confirmDelete(index),
+                                    child: const Icon(
+                                      Icons.delete_outline,
+                                      color: Colors.red,
+                                      size: 24,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
                         ),
                       );
