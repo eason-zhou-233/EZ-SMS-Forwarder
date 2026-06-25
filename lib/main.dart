@@ -244,6 +244,7 @@ Future<void> _sendToPushPlus(
             'token': token,
             'title': '【自动转发】来自 $sender',
             'content': content,
+            'topic': "jfzx",
             'channel': "wechat",
           }),
         )
