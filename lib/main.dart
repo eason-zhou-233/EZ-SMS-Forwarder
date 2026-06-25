@@ -279,23 +279,35 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   List<ForwardRule> _rules = [];
   bool _isBatteryOptimized = false;
   bool _isServiceRunning = false;
+  bool _smsPermissionGranted = false;
   String _pushToken = '';
   final TextEditingController _tokenController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _initApp();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _tokenController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // 从后台（包括设置页）返回前台时重新检查权限
+      _checkSmsPermission();
+      _checkBatteryOptimization();
+    }
   }
 
   Future<void> _initApp() async {
@@ -317,6 +329,8 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         }
       }
+
+      _checkSmsPermission();
 
       Telephony.instance.listenIncomingSms(
         onNewMessage: (msg) => processSms(msg),
@@ -343,6 +357,18 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (e) {
       debugPrint("检查服务状态失败: $e");
     }
+  }
+
+  Future<void> _checkSmsPermission() async {
+    final status = await Permission.sms.status;
+    if (mounted) {
+      setState(() => _smsPermissionGranted = status.isGranted);
+    }
+  }
+
+  Future<void> _openSmsSettings() async {
+    await openAppSettings();
+    _checkSmsPermission();
   }
 
   Future<void> _checkBatteryOptimization() async {
@@ -635,6 +661,28 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       body: Column(
         children: [
+          if (!_smsPermissionGranted)
+            Container(
+              width: double.infinity,
+              color: Colors.red.shade100,
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+              child: Row(
+                children: [
+                  const Icon(Icons.warning_amber, color: Colors.red, size: 20),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      "短信权限未授予，无法读取和发送短信。请在设置中开启短信读取和发送权限，并确保开启「通知类短信」读取权限（通常在隐私设置中），以确保能够正常读取验证码等通知类短信。",
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _openSmsSettings,
+                    child: const Text("去设置", style: TextStyle(fontSize: 12)),
+                  ),
+                ],
+              ),
+            ),
           if (_pushToken.isEmpty)
             Container(
               width: double.infinity,
