@@ -9,31 +9,50 @@ import 'dart:ui';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
-// --- 全局常量配置 ---
-const String myPushToken = "a6cbb3c5cfe448d78175479f6610c836";
+// --- 存储 Key 常量 ---
+const String _pushTokenKey = 'push_plus_token';
 
 // --- 规则模型 ---
 class ForwardRule {
   String targetNumber;
   String keyword;
-  String matchType;
+  String numberMatchType;
+  String keywordMatchType;
 
   ForwardRule({
     required this.targetNumber,
     required this.keyword,
-    this.matchType = '包含',
+    this.numberMatchType = '精确匹配',
+    this.keywordMatchType = '包含',
   });
 
   Map<String, dynamic> toJson() => {
     'targetNumber': targetNumber,
     'keyword': keyword,
-    'matchType': matchType,
+    'numberMatchType': numberMatchType,
+    'keywordMatchType': keywordMatchType,
   };
+
   factory ForwardRule.fromJson(Map<String, dynamic> json) => ForwardRule(
     targetNumber: json['targetNumber'] ?? '',
     keyword: json['keyword'] ?? '',
-    matchType: json['matchType'] ?? '包含',
+    numberMatchType: json['numberMatchType'] ?? '精确匹配',
+    keywordMatchType: json['keywordMatchType'] ?? '包含',
   );
+}
+
+// ------------------- 后台通知插件（单次初始化） -------------------
+FlutterLocalNotificationsPlugin? _bgFlutterLocalNotificationsPlugin;
+
+Future<void> _ensureBgNotificationsInitialized() async {
+  if (_bgFlutterLocalNotificationsPlugin != null) return;
+  _bgFlutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+  const AndroidInitializationSettings androidSettings =
+      AndroidInitializationSettings('@mipmap/ic_launcher');
+  const InitializationSettings settings = InitializationSettings(
+    android: androidSettings,
+  );
+  await _bgFlutterLocalNotificationsPlugin!.initialize(settings: settings);
 }
 
 // ------------------- 后台服务初始化 -------------------
@@ -66,6 +85,10 @@ Future<void> initializeService() async {
       initialNotificationTitle: '短信转发助手',
       initialNotificationContent: '监控运行中...',
       foregroundServiceNotificationId: 888,
+      foregroundServiceTypes: [
+        AndroidForegroundType.specialUse,
+        AndroidForegroundType.dataSync,
+      ],
     ),
     iosConfiguration: IosConfiguration(
       autoStart: true,
@@ -82,8 +105,10 @@ Future<bool> onIosBackground(ServiceInstance service) async => true;
 void onStart(ServiceInstance service) async {
   DartPluginRegistrant.ensureInitialized();
 
-  // 在后台进程中必须初始化 Flutter 引擎绑定，否则后续调用 SharedPreferences 会直接崩溃！
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 在 onStart 中一次性初始化通知插件
+  await _ensureBgNotificationsInitialized();
 
   final Telephony telephony = Telephony.instance;
 
@@ -110,10 +135,26 @@ void onStart(ServiceInstance service) async {
 
 @pragma('vm:entry-point')
 Future<void> backHandler(SmsMessage message) async {
+  WidgetsFlutterBinding.ensureInitialized();
+  DartPluginRegistrant.ensureInitialized();
   await processSms(message);
 }
 
 // ------------------- 核心转发逻辑 -------------------
+
+/// 标准化手机号码：去掉国际区号(+86等)、空格、短横线等
+String _normalizePhone(String phone) {
+  // 去掉所有空格、短横线、括号
+  var result = phone.replaceAll(RegExp(r'[\s\-\(\)]'), '');
+  // 去掉国际区号前缀：先去掉 + 号，再去掉已知的中国区号 86
+  if (result.startsWith('+')) {
+    result = result.substring(1);
+  }
+  if (result.startsWith('86')) {
+    result = result.substring(2);
+  }
+  return result;
+}
 
 bool _isMatch(String fullText, String pattern, String type) {
   if (pattern.isEmpty) return true;
@@ -133,93 +174,80 @@ bool _isMatch(String fullText, String pattern, String type) {
 }
 
 Future<void> processSms(SmsMessage message) async {
-  // 1. 获取通知插件实例
-  final flnp = FlutterLocalNotificationsPlugin();
-  // --- 【后台初始化】 ---
-  // 必须显式指定图标，通常使用 Android 项目自带的 @mipmap/ic_launcher
-  const AndroidInitializationSettings initializationSettingsAndroid =
-      AndroidInitializationSettings('@mipmap/ic_launcher');
-  const InitializationSettings initializationSettings = InitializationSettings(
-    android: initializationSettingsAndroid,
-  );
-
-  // 在后台进程中重新初始化一次
-  await flnp.initialize(settings: initializationSettings);
-  // ----------------------------
-  // // 生成一个相对唯一的ID
-  // final int notificationId = DateTime.now().millisecondsSinceEpoch % 100000;
-  // // 【调试断点 1】：证明系统确实把短信交给了我们的代码
-  // await flnp.show(
-  //   id: notificationId, // 随机ID避免覆盖
-  //   title: '⚡ 成功拦截到底层短信',
-  //   body: '来自: ${message.address}',
-  //   notificationDetails: const NotificationDetails(
-  //     android: AndroidNotificationDetails(
-  //       'forward_service_channel',
-  //       '短信转发监控',
-  //       importance: Importance.max,
-  //       priority: Priority.high,
-  //       showWhen: true,
-  //     ),
-  //   ),
-  // );
+  await _ensureBgNotificationsInitialized();
 
   final prefs = await SharedPreferences.getInstance();
-  await prefs.reload(); // 强制刷新隔离区缓存
+  await prefs.reload();
 
   final List<String> rulesJson = prefs.getStringList('forward_rules') ?? [];
   final sender = message.address ?? '';
   final content = message.body ?? '';
 
-  // // 【调试断点 2】：确认当前读取到了几条规则
-  // await flnp.show(
-  //   id: DateTime.now().millisecond + 1,
-  //   title: '🔍 正在匹配规则',
-  //   body: '当前内存中共有 ${rulesJson.length} 条转发规则',
-  //   notificationDetails: NotificationDetails(
-  //     android: AndroidNotificationDetails(
-  //       'forward_service_channel',
-  //       '短信转发监控',
-  //       importance: Importance.low,
-  //     ),
-  //   ),
-  // );
+  final token = prefs.getString(_pushTokenKey) ?? '';
+
+  // 标准化后的号码，用于号码比较
+  final normalizedSender = _normalizePhone(sender);
+
+  debugPrint('========== 短信匹配日志 ==========');
+  debugPrint('原始发件人: "$sender"');
+  debugPrint('标准化发件人: "$normalizedSender"');
+  debugPrint('短信内容: "$content"');
+  debugPrint('当前规则数: ${rulesJson.length}');
 
   for (String ruleStr in rulesJson) {
     final rule = ForwardRule.fromJson(jsonDecode(ruleStr));
-    if (_isMatch(sender, rule.targetNumber, rule.matchType) &&
-        _isMatch(content, rule.keyword, rule.matchType)) {
-      // // 【调试断点 3】：规则匹配成功，准备发网路请求
-      // await flnp.show(
-      //   id: DateTime.now().millisecond + 2,
-      //   title: '✅ 规则匹配成功',
-      //   body: '准备推送到 PushPlus...',
-      //   notificationDetails: NotificationDetails(
-      //     android: AndroidNotificationDetails(
-      //       'forward_service_channel',
-      //       '短信转发监控',
-      //       importance: Importance.high,
-      //     ),
-      //   ),
-      // );
-      await _sendToPushPlus(sender, content);
-      break;
+    final normalizedTarget = _normalizePhone(rule.targetNumber);
+
+    debugPrint('---');
+    debugPrint('规则-原始号码: "${rule.targetNumber}"');
+    debugPrint('规则-标准化号码: "$normalizedTarget"');
+    debugPrint('规则-号码匹配模式: ${rule.numberMatchType}');
+    debugPrint('规则-关键词: "${rule.keyword}"');
+    debugPrint('规则-关键词匹配模式: ${rule.keywordMatchType}');
+
+    final numberMatch = _isMatch(
+      normalizedSender,
+      normalizedTarget,
+      rule.numberMatchType,
+    );
+    final keywordMatch = _isMatch(content, rule.keyword, rule.keywordMatchType);
+
+    debugPrint('号码匹配结果: $numberMatch');
+    debugPrint('关键词匹配结果: $keywordMatch');
+
+    if (numberMatch && keywordMatch) {
+      debugPrint('>>> 规则匹配成功，开始转发 <<<');
+      await _sendToPushPlus(sender, content, token);
+      debugPrint('==================================');
+      return;
     }
   }
+  debugPrint('>>> 无匹配规则，未转发 <<<');
+  debugPrint('==================================');
 }
 
-Future<void> _sendToPushPlus(String sender, String content) async {
+Future<void> _sendToPushPlus(
+  String sender,
+  String content,
+  String token,
+) async {
+  if (token.isEmpty) {
+    debugPrint("转发跳过: 未配置 PushPlus Token");
+    return;
+  }
   try {
-    final response = await http.post(
-      Uri.parse('http://www.pushplus.plus/send'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'token': myPushToken,
-        'title': '【自动转发】来自 $sender',
-        'content': content,
-        'channel': "wechat",
-      }),
-    );
+    final response = await http
+        .post(
+          Uri.parse('https://www.pushplus.plus/send'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'token': token,
+            'title': '【自动转发】来自 $sender',
+            'content': content,
+            'channel': "wechat",
+          }),
+        )
+        .timeout(const Duration(seconds: 10));
     debugPrint("转发成功: ${response.body}");
   } catch (e) {
     debugPrint("转发失败: $e");
@@ -255,6 +283,8 @@ class _HomeScreenState extends State<HomeScreen> {
   List<ForwardRule> _rules = [];
   bool _isBatteryOptimized = false;
   bool _isServiceRunning = false;
+  String _pushToken = '';
+  final TextEditingController _tokenController = TextEditingController();
 
   @override
   void initState() {
@@ -262,83 +292,167 @@ class _HomeScreenState extends State<HomeScreen> {
     _initApp();
   }
 
+  @override
+  void dispose() {
+    _tokenController.dispose();
+    super.dispose();
+  }
+
   Future<void> _initApp() async {
-    // 1. 依次检查并申请所有必要权限
-    Map<Permission, PermissionStatus> statuses = await [
-      Permission.sms,
-      Permission.notification, // 必须申请通知权限，否则调试通知看不见
-      Permission.phone,
-      Permission.ignoreBatteryOptimizations,
-    ].request();
+    try {
+      final statuses = await [
+        Permission.sms,
+        Permission.notification,
+        Permission.phone,
+        Permission.ignoreBatteryOptimizations,
+      ].request();
 
-    // 2. 在主进程也注册一遍监听（让后台监听生效的关键“握手”）
-    Telephony.instance.listenIncomingSms(
-      onNewMessage: (msg) => processSms(msg),
-      onBackgroundMessage: backHandler,
-    );
+      if (statuses[Permission.notification]?.isDenied == true) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('请授予通知权限以确保后台服务正常运行'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      }
 
-    _checkServiceStatus();
-    _checkBatteryOptimization();
-    _loadRules();
+      Telephony.instance.listenIncomingSms(
+        onNewMessage: (msg) => processSms(msg),
+        onBackgroundMessage: backHandler,
+      );
+
+      _checkServiceStatus();
+      _checkBatteryOptimization();
+      _loadRules();
+      _loadToken();
+    } catch (e) {
+      debugPrint("初始化失败: $e");
+    }
   }
 
   Future<void> _checkServiceStatus() async {
-    final isRunning = await FlutterBackgroundService().isRunning();
-    setState(() {
-      _isServiceRunning = isRunning;
-    });
-  }
-
-  Future<void> _initPermissions() async {
-    await [Permission.sms, Permission.notification, Permission.phone].request();
+    try {
+      final isRunning = await FlutterBackgroundService().isRunning();
+      if (mounted) {
+        setState(() {
+          _isServiceRunning = isRunning;
+        });
+      }
+    } catch (e) {
+      debugPrint("检查服务状态失败: $e");
+    }
   }
 
   Future<void> _checkBatteryOptimization() async {
-    var status = await Permission.ignoreBatteryOptimizations.status;
-    setState(() => _isBatteryOptimized = !status.isGranted);
+    try {
+      var status = await Permission.ignoreBatteryOptimizations.status;
+      if (mounted) {
+        setState(() => _isBatteryOptimized = !status.isGranted);
+      }
+    } catch (e) {
+      debugPrint("检查电池优化状态失败: $e");
+    }
   }
 
   Future<void> _loadRules() async {
-    final prefs = await SharedPreferences.getInstance();
-    final List<String> rulesJson = prefs.getStringList('forward_rules') ?? [];
-    setState(() {
-      _rules = rulesJson
-          .map((e) => ForwardRule.fromJson(jsonDecode(e)))
-          .toList();
-    });
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final List<String> rulesJson = prefs.getStringList('forward_rules') ?? [];
+      if (mounted) {
+        setState(() {
+          _rules = rulesJson
+              .map((e) => ForwardRule.fromJson(jsonDecode(e)))
+              .toList();
+        });
+      }
+    } catch (e) {
+      debugPrint("加载规则失败: $e");
+    }
   }
 
   Future<void> _saveRules() async {
-    final prefs = await SharedPreferences.getInstance();
-    List<String> rulesJson = _rules.map((e) => jsonEncode(e.toJson())).toList();
-    await prefs.setStringList('forward_rules', rulesJson);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      List<String> rulesJson = _rules
+          .map((e) => jsonEncode(e.toJson()))
+          .toList();
+      await prefs.setStringList('forward_rules', rulesJson);
+    } catch (e) {
+      debugPrint("保存规则失败: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('保存规则失败'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 
-  void _toggleService() async {
-    final service = FlutterBackgroundService();
-    bool isRunning = await service.isRunning();
-
-    if (isRunning) {
-      service.invoke("stopService");
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("后台监控服务已停止"),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
-    } else {
-      await service.startService();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("后台监控服务已启动"),
-          backgroundColor: Colors.green,
-        ),
-      );
+  Future<void> _loadToken() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString(_pushTokenKey) ?? '';
+      _tokenController.text = token;
+      if (mounted) {
+        setState(() => _pushToken = token);
+      }
+    } catch (e) {
+      debugPrint("加载Token失败: $e");
     }
+  }
 
-    Future.delayed(const Duration(milliseconds: 500), () {
-      _checkServiceStatus();
-    });
+  Future<void> _saveToken(String token) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_pushTokenKey, token.trim());
+      if (mounted) {
+        setState(() => _pushToken = token.trim());
+      }
+    } catch (e) {
+      debugPrint("保存Token失败: $e");
+    }
+  }
+
+  Future<void> _toggleService() async {
+    try {
+      final service = FlutterBackgroundService();
+      bool isRunning = await service.isRunning();
+
+      if (isRunning) {
+        service.invoke("stopService");
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("后台监控服务已停止"),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
+        }
+      } else {
+        await service.startService();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("后台监控服务已启动"),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      }
+
+      await Future.delayed(const Duration(milliseconds: 500));
+      if (mounted) {
+        _checkServiceStatus();
+      }
+    } catch (e) {
+      debugPrint("切换服务失败: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('操作失败: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 
   void _confirmDelete(int index) {
@@ -368,40 +482,61 @@ class _HomeScreenState extends State<HomeScreen> {
   void _showAddRuleDialog() {
     final numCtrl = TextEditingController();
     final keyCtrl = TextEditingController();
-    String selectedType = '包含';
+    String numberMatchType = '精确匹配';
+    String keywordMatchType = '包含';
 
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           title: const Text('新增转发规则'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: numCtrl,
-                decoration: const InputDecoration(labelText: '监听号码'),
-              ),
-              TextField(
-                controller: keyCtrl,
-                decoration: const InputDecoration(labelText: '关键词'),
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                initialValue: selectedType,
-                decoration: const InputDecoration(
-                  labelText: '匹配模式',
-                  border: OutlineInputBorder(),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: numCtrl,
+                  decoration: const InputDecoration(labelText: '监听号码（留空匹配所有）'),
                 ),
-                items: const [
-                  DropdownMenuItem(value: '包含', child: Text('包含')),
-                  DropdownMenuItem(value: '精确匹配', child: Text('精确匹配')),
-                  DropdownMenuItem(value: '以此开头', child: Text('以此开头')),
-                  DropdownMenuItem(value: '以此结尾', child: Text('以此结尾')),
-                ],
-                onChanged: (val) => setDialogState(() => selectedType = val!),
-              ),
-            ],
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: numberMatchType,
+                  decoration: const InputDecoration(
+                    labelText: '号码匹配模式',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: '包含', child: Text('包含')),
+                    DropdownMenuItem(value: '精确匹配', child: Text('精确匹配')),
+                    DropdownMenuItem(value: '以此开头', child: Text('以此开头')),
+                    DropdownMenuItem(value: '以此结尾', child: Text('以此结尾')),
+                  ],
+                  onChanged: (val) =>
+                      setDialogState(() => numberMatchType = val!),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: keyCtrl,
+                  decoration: const InputDecoration(labelText: '关键词（留空匹配所有）'),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: keywordMatchType,
+                  decoration: const InputDecoration(
+                    labelText: '关键词匹配模式',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: '包含', child: Text('包含')),
+                    DropdownMenuItem(value: '精确匹配', child: Text('精确匹配')),
+                    DropdownMenuItem(value: '以此开头', child: Text('以此开头')),
+                    DropdownMenuItem(value: '以此结尾', child: Text('以此结尾')),
+                  ],
+                  onChanged: (val) =>
+                      setDialogState(() => keywordMatchType = val!),
+                ),
+              ],
+            ),
           ),
           actions: [
             TextButton(
@@ -415,7 +550,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     ForwardRule(
                       targetNumber: numCtrl.text.trim(),
                       keyword: keyCtrl.text.trim(),
-                      matchType: selectedType,
+                      numberMatchType: numberMatchType,
+                      keywordMatchType: keywordMatchType,
                     ),
                   ),
                 );
@@ -430,6 +566,35 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  void _showTokenDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('PushPlus Token'),
+        content: TextField(
+          controller: _tokenController,
+          decoration: const InputDecoration(
+            labelText: '请输入 PushPlus Token',
+            hintText: '在 pushplus.plus 官网获取',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              _saveToken(_tokenController.text);
+              Navigator.pop(context);
+            },
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -437,10 +602,14 @@ class _HomeScreenState extends State<HomeScreen> {
         title: const Text('短信转发助手'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
-          // IconButton(
-          //   icon: const Icon(Icons.send),
-          //   onPressed: () => _sendToPushPlus("调试测试", "手动触发网络检查"),
-          // ),
+          IconButton(
+            icon: Icon(
+              Icons.key,
+              color: _pushToken.isEmpty ? Colors.orange : Colors.green,
+            ),
+            onPressed: _showTokenDialog,
+            tooltip: _pushToken.isEmpty ? "未配置Token" : "已配置Token",
+          ),
           IconButton(
             icon: Icon(
               _isServiceRunning ? Icons.stop_circle : Icons.play_circle_filled,
@@ -454,6 +623,32 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       body: Column(
         children: [
+          if (_pushToken.isEmpty)
+            Container(
+              width: double.infinity,
+              color: Colors.orange.shade100,
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.warning_amber,
+                    color: Colors.orange,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      "尚未配置 PushPlus Token，短信无法转发",
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _showTokenDialog,
+                    child: const Text("去配置", style: TextStyle(fontSize: 12)),
+                  ),
+                ],
+              ),
+            ),
           if (_isBatteryOptimized)
             Container(
               color: Colors.orange.shade100,
@@ -506,12 +701,29 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: ListTile(
                           title: Text(
                             rule.targetNumber.isEmpty
-                                ? "所有号码"
-                                : "号码: ${rule.targetNumber}",
+                                ? "监听号码: 所有号码"
+                                : "监听号码: ${rule.targetNumber}",
+                            style: const TextStyle(fontSize: 15),
                           ),
-                          subtitle: Text(
-                            "模式: ${rule.matchType} | 关键词: ${rule.keyword}",
+                          subtitle: Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  "号码匹配规则: ${rule.numberMatchType}",
+                                  style: const TextStyle(fontSize: 13),
+                                ),
+                                Text(
+                                  rule.keyword.isEmpty
+                                      ? "关键词匹配规则: ${rule.keywordMatchType} (匹配所有内容)"
+                                      : "关键词匹配规则: ${rule.keywordMatchType} | 匹配关键词: ${rule.keyword}",
+                                  style: const TextStyle(fontSize: 13),
+                                ),
+                              ],
+                            ),
                           ),
+                          isThreeLine: true,
                           trailing: IconButton(
                             icon: const Icon(
                               Icons.delete_outline,
