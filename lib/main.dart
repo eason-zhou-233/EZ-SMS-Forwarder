@@ -35,7 +35,7 @@ class ForwardRule {
     required this.keyword,
     this.numberMatchType = '精确匹配',
     this.keywordMatchType = '包含',
-    this.forwardType = _forwardTypeSms,
+    this.forwardType = _forwardTypeDingTalk,
     this.pushPlusToken = '',
     this.pushPlusTopic = '',
     this.pushPlusTo = '',
@@ -61,7 +61,7 @@ class ForwardRule {
     keyword: json['keyword'] ?? '',
     numberMatchType: json['numberMatchType'] ?? '精确匹配',
     keywordMatchType: json['keywordMatchType'] ?? '包含',
-    forwardType: json['forwardType'] ?? _forwardTypeSms,
+    forwardType: json['forwardType'] ?? _forwardTypeDingTalk,
     pushPlusToken: json['pushPlusToken'] ?? '',
     pushPlusTopic: json['pushPlusTopic'] ?? '',
     pushPlusTo: json['pushPlusTo'] ?? '',
@@ -610,7 +610,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final keyCtrl = TextEditingController(text: existingRule?.keyword ?? '');
     String numberMatchType = existingRule?.numberMatchType ?? '精确匹配';
     String keywordMatchType = existingRule?.keywordMatchType ?? '包含';
-    String forwardType = existingRule?.forwardType ?? _forwardTypeSms;
+    String forwardType = existingRule?.forwardType ?? _forwardTypeDingTalk;
     // 各转发方式的配置
     final ppTokenCtrl = TextEditingController(
       text: existingRule?.pushPlusToken ?? '',
@@ -695,16 +695,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   ),
                   items: const [
                     DropdownMenuItem(
-                      value: _forwardTypeSms,
-                      child: Text('短信发送'),
-                    ),
-                    DropdownMenuItem(
                       value: _forwardTypeDingTalk,
                       child: Text('钉钉群'),
                     ),
                     DropdownMenuItem(
                       value: _forwardTypePushPlus,
                       child: Text('PushPlus微信公众号推送'),
+                    ),
+                    DropdownMenuItem(
+                      value: _forwardTypeSms,
+                      child: Text('短信发送'),
                     ),
                   ],
                   onChanged: (val) => setDialogState(() => forwardType = val!),
@@ -738,13 +738,23 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 ],
                 // --- 短信发送 配置 ---
                 if (forwardType == _forwardTypeSms)
-                  TextField(
-                    controller: smsTargetCtrl,
-                    keyboardType: TextInputType.phone,
-                    decoration: const InputDecoration(
-                      labelText: '目标号码（必填）',
-                      hintText: '短信将转发到此号码',
-                    ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      TextField(
+                        controller: smsTargetCtrl,
+                        keyboardType: TextInputType.phone,
+                        decoration: const InputDecoration(
+                          labelText: '目标号码（必填）',
+                          hintText: '短信将转发到此号码',
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        '⚠️ Android 系统限制：非默认短信应用发送短信时系统会弹出确认框，无法完全静默自动发送。',
+                        style: TextStyle(fontSize: 11, color: Colors.red),
+                      ),
+                    ],
                   ),
                 // --- 钉钉群 配置 ---
                 if (forwardType == _forwardTypeDingTalk)
