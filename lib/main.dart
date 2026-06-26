@@ -111,8 +111,8 @@ Future<void> initializeService() async {
       autoStart: true,
       isForegroundMode: true,
       notificationChannelId: 'forward_service_channel',
-      initialNotificationTitle: '短信转发助手',
-      initialNotificationContent: '监控运行中...',
+      initialNotificationTitle: 'EZ短信转发助手',
+      initialNotificationContent: '服务启动中...',
       foregroundServiceNotificationId: 888,
       foregroundServiceTypes: [
         AndroidForegroundType.specialUse,
@@ -154,7 +154,7 @@ void onStart(ServiceInstance service) async {
     if (service is AndroidServiceInstance) {
       if (await service.isForegroundService()) {
         service.setForegroundNotificationInfo(
-          title: "短信转发助手",
+          title: "EZ短信转发助手",
           content: "正在后台运行...",
         );
       }
@@ -540,9 +540,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         service.invoke("stopService");
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("后台监控服务已停止"),
+            SnackBar(
+              content: const Text("正在停止后台服务"),
               backgroundColor: Colors.redAccent,
+              duration: const Duration(seconds: 1),
             ),
           );
         }
@@ -550,9 +551,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         await service.startService();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("后台监控服务已启动"),
+            SnackBar(
+              content: const Text("正在启动后台服务"),
               backgroundColor: Colors.green,
+              duration: const Duration(seconds: 1),
             ),
           );
         }
@@ -809,7 +811,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('短信转发助手'),
+        title: const Text('EZ短信转发助手'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
           IconButton(
@@ -903,7 +905,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 : Colors.grey.shade200,
             padding: const EdgeInsets.symmetric(vertical: 4),
             child: Text(
-              _isServiceRunning ? "● 监控服务运行中" : "○ 监控服务已停止",
+              _isServiceRunning ? "● 后台服务运行中" : "○ 后台服务已停止",
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: _isServiceRunning ? Colors.green : Colors.grey,
