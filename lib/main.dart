@@ -9,8 +9,10 @@ import 'dart:ui';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
-// --- 存储 Key 常量 ---
-const String _pushTokenKey = 'push_plus_token';
+// --- 转发方式常量 ---
+const String _forwardTypePushPlus = 'PushPlus推送';
+const String _forwardTypeSms = '短信发送';
+const String _forwardTypeDingTalk = '钉钉群';
 
 // --- 规则模型 ---
 class ForwardRule {
@@ -18,12 +20,27 @@ class ForwardRule {
   String keyword;
   String numberMatchType;
   String keywordMatchType;
+  String forwardType; // 转发方式
+  // PushPlus 配置
+  String pushPlusToken;
+  String pushPlusTopic;
+  String pushPlusTo;
+  // 短信转发 配置
+  String smsTargetNumber;
+  // 钉钉群 配置
+  String dingTalkAccessToken;
 
   ForwardRule({
     required this.targetNumber,
     required this.keyword,
     this.numberMatchType = '精确匹配',
     this.keywordMatchType = '包含',
+    this.forwardType = _forwardTypeSms,
+    this.pushPlusToken = '',
+    this.pushPlusTopic = '',
+    this.pushPlusTo = '',
+    this.smsTargetNumber = '',
+    this.dingTalkAccessToken = '',
   });
 
   Map<String, dynamic> toJson() => {
@@ -31,6 +48,12 @@ class ForwardRule {
     'keyword': keyword,
     'numberMatchType': numberMatchType,
     'keywordMatchType': keywordMatchType,
+    'forwardType': forwardType,
+    'pushPlusToken': pushPlusToken,
+    'pushPlusTopic': pushPlusTopic,
+    'pushPlusTo': pushPlusTo,
+    'smsTargetNumber': smsTargetNumber,
+    'dingTalkAccessToken': dingTalkAccessToken,
   };
 
   factory ForwardRule.fromJson(Map<String, dynamic> json) => ForwardRule(
@@ -38,6 +61,12 @@ class ForwardRule {
     keyword: json['keyword'] ?? '',
     numberMatchType: json['numberMatchType'] ?? '精确匹配',
     keywordMatchType: json['keywordMatchType'] ?? '包含',
+    forwardType: json['forwardType'] ?? _forwardTypeSms,
+    pushPlusToken: json['pushPlusToken'] ?? '',
+    pushPlusTopic: json['pushPlusTopic'] ?? '',
+    pushPlusTo: json['pushPlusTo'] ?? '',
+    smsTargetNumber: json['smsTargetNumber'] ?? '',
+    dingTalkAccessToken: json['dingTalkAccessToken'] ?? '',
   );
 }
 
@@ -183,8 +212,6 @@ Future<void> processSms(SmsMessage message) async {
   final sender = message.address ?? '';
   final content = message.body ?? '';
 
-  final token = prefs.getString(_pushTokenKey) ?? '';
-
   // 标准化后的号码，用于号码比较
   final normalizedSender = _normalizePhone(sender);
 
@@ -204,6 +231,7 @@ Future<void> processSms(SmsMessage message) async {
     debugPrint('规则-号码匹配模式: ${rule.numberMatchType}');
     debugPrint('规则-关键词: "${rule.keyword}"');
     debugPrint('规则-关键词匹配模式: ${rule.keywordMatchType}');
+    debugPrint('规则-转发方式: ${rule.forwardType}');
 
     final numberMatch = _isMatch(
       normalizedSender,
@@ -216,8 +244,8 @@ Future<void> processSms(SmsMessage message) async {
     debugPrint('关键词匹配结果: $keywordMatch');
 
     if (numberMatch && keywordMatch) {
-      debugPrint('>>> 规则匹配成功，开始转发 <<<');
-      await _sendToPushPlus(sender, content, token);
+      debugPrint('>>> 规则匹配成功，开始转发: ${rule.forwardType} <<<');
+      await _executeForward(rule, sender, content);
       debugPrint('==================================');
       return;
     }
@@ -226,36 +254,110 @@ Future<void> processSms(SmsMessage message) async {
   debugPrint('==================================');
 }
 
-Future<void> _sendToPushPlus(
+Future<void> _executeForward(
+  ForwardRule rule,
   String sender,
   String content,
-  String token,
 ) async {
-  if (token.isEmpty) {
+  switch (rule.forwardType) {
+    case _forwardTypePushPlus:
+      await _sendToPushPlus(rule, sender, content);
+      break;
+    case _forwardTypeSms:
+      await _sendBySms(rule, sender, content);
+      break;
+    case _forwardTypeDingTalk:
+      await _sendToDingTalk(rule, sender, content);
+      break;
+    default:
+      debugPrint("未知的转发方式: ${rule.forwardType}");
+  }
+}
+
+Future<void> _sendToPushPlus(
+  ForwardRule rule,
+  String sender,
+  String content,
+) async {
+  if (rule.pushPlusToken.isEmpty) {
     debugPrint("转发跳过: 未配置 PushPlus Token");
     return;
   }
   try {
+    final body = <String, dynamic>{
+      'token': rule.pushPlusToken,
+      'title': '【验证码】来自 $sender',
+      'content': content,
+      'channel': "wechat",
+    };
+    if (rule.pushPlusTopic.isNotEmpty) {
+      body['topic'] = rule.pushPlusTopic;
+    }
+    if (rule.pushPlusTo.isNotEmpty) {
+      body['to'] = rule.pushPlusTo;
+    }
     final response = await http
         .post(
           Uri.parse('https://www.pushplus.plus/send'),
           headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({
-            'token': token,
-            'title': '【自动转发】来自 $sender',
-            'content': content,
-            'topic': "jfzx",
-            'channel': "wechat",
-          }),
+          body: jsonEncode(body),
         )
         .timeout(const Duration(seconds: 10));
-    debugPrint("转发成功: ${response.body}");
+    debugPrint("PushPlus转发成功: ${response.body}");
   } catch (e) {
-    debugPrint("转发失败: $e");
+    debugPrint("PushPlus转发失败: $e");
   }
 }
 
-// ------------------- UI 部分 -------------------
+Future<void> _sendBySms(ForwardRule rule, String sender, String content) async {
+  if (rule.smsTargetNumber.isEmpty) {
+    debugPrint("转发跳过: 未配置短信目标号码");
+    return;
+  }
+  try {
+    await Telephony.instance.sendSms(
+      to: rule.smsTargetNumber,
+      message: '【验证码】来自 $sender\n$content',
+    );
+    debugPrint("短信转发已发送");
+  } catch (e) {
+    debugPrint("短信转发失败: $e");
+  }
+}
+
+Future<void> _sendToDingTalk(
+  ForwardRule rule,
+  String sender,
+  String content,
+) async {
+  if (rule.dingTalkAccessToken.isEmpty) {
+    debugPrint("转发跳过: 未配置钉钉 Access Token");
+    return;
+  }
+  try {
+    final url = Uri.parse(
+      'https://oapi.dingtalk.com/robot/send?access_token=${rule.dingTalkAccessToken}',
+    );
+    final title = '短信转发 - 来自 $sender';
+    final text =
+        '**【验证码】**  \n'
+        '**发件人：** $sender  \n'
+        '**内容：** $content';
+    final response = await http
+        .post(
+          url,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'msgtype': 'markdown',
+            'markdown': {'title': title, 'text': text},
+          }),
+        )
+        .timeout(const Duration(seconds: 10));
+    debugPrint("钉钉转发成功: ${response.body}");
+  } catch (e) {
+    debugPrint("钉钉转发失败: $e");
+  }
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -268,7 +370,14 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.deepPurple),
+      theme: ThemeData(
+        useMaterial3: true,
+        colorSchemeSeed: Colors.deepPurple,
+        inputDecorationTheme: const InputDecorationTheme(
+          labelStyle: TextStyle(fontSize: 14),
+          hintStyle: TextStyle(fontSize: 13),
+        ),
+      ),
       home: const HomeScreen(),
     );
   }
@@ -286,8 +395,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _isServiceRunning = false;
   bool _smsPermissionGranted = false;
   bool _notificationPermissionGranted = false;
-  String _pushToken = '';
-  final TextEditingController _tokenController = TextEditingController();
 
   @override
   void initState() {
@@ -299,7 +406,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _tokenController.dispose();
     super.dispose();
   }
 
@@ -344,7 +450,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _checkServiceStatus();
       _checkBatteryOptimization();
       _loadRules();
-      _loadToken();
     } catch (e) {
       debugPrint("初始化失败: $e");
     }
@@ -423,31 +528,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           const SnackBar(content: Text('保存规则失败'), backgroundColor: Colors.red),
         );
       }
-    }
-  }
-
-  Future<void> _loadToken() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString(_pushTokenKey) ?? '';
-      _tokenController.text = token;
-      if (mounted) {
-        setState(() => _pushToken = token);
-      }
-    } catch (e) {
-      debugPrint("加载Token失败: $e");
-    }
-  }
-
-  Future<void> _saveToken(String token) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_pushTokenKey, token.trim());
-      if (mounted) {
-        setState(() => _pushToken = token.trim());
-      }
-    } catch (e) {
-      debugPrint("保存Token失败: $e");
     }
   }
 
@@ -530,23 +610,46 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final keyCtrl = TextEditingController(text: existingRule?.keyword ?? '');
     String numberMatchType = existingRule?.numberMatchType ?? '精确匹配';
     String keywordMatchType = existingRule?.keywordMatchType ?? '包含';
+    String forwardType = existingRule?.forwardType ?? _forwardTypeSms;
+    // 各转发方式的配置
+    final ppTokenCtrl = TextEditingController(
+      text: existingRule?.pushPlusToken ?? '',
+    );
+    final ppTopicCtrl = TextEditingController(
+      text: existingRule?.pushPlusTopic ?? '',
+    );
+    final ppToCtrl = TextEditingController(
+      text: existingRule?.pushPlusTo ?? '',
+    );
+    final smsTargetCtrl = TextEditingController(
+      text: existingRule?.smsTargetNumber ?? '',
+    );
+    final dtTokenCtrl = TextEditingController(
+      text: existingRule?.dingTalkAccessToken ?? '',
+    );
 
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 24,
+          ),
           title: Text(isEdit ? '编辑转发规则' : '新增转发规则'),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // --- 监听号码 ---
                 TextField(
                   controller: numCtrl,
                   decoration: const InputDecoration(labelText: '监听号码（留空匹配所有）'),
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  value: numberMatchType,
+                  initialValue: numberMatchType,
                   decoration: const InputDecoration(
                     labelText: '号码匹配模式',
                     border: OutlineInputBorder(),
@@ -561,13 +664,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       setDialogState(() => numberMatchType = val!),
                 ),
                 const SizedBox(height: 16),
+                // --- 关键词 ---
                 TextField(
                   controller: keyCtrl,
                   decoration: const InputDecoration(labelText: '关键词（留空匹配所有）'),
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  value: keywordMatchType,
+                  initialValue: keywordMatchType,
                   decoration: const InputDecoration(
                     labelText: '关键词匹配模式',
                     border: OutlineInputBorder(),
@@ -581,6 +685,76 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   onChanged: (val) =>
                       setDialogState(() => keywordMatchType = val!),
                 ),
+                const SizedBox(height: 16),
+                // --- 转发方式 ---
+                DropdownButtonFormField<String>(
+                  initialValue: forwardType,
+                  decoration: const InputDecoration(
+                    labelText: '转发方式',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: _forwardTypeSms,
+                      child: Text('短信发送'),
+                    ),
+                    DropdownMenuItem(
+                      value: _forwardTypeDingTalk,
+                      child: Text('钉钉群'),
+                    ),
+                    DropdownMenuItem(
+                      value: _forwardTypePushPlus,
+                      child: Text('PushPlus微信公众号推送'),
+                    ),
+                  ],
+                  onChanged: (val) => setDialogState(() => forwardType = val!),
+                ),
+                const SizedBox(height: 16),
+                // --- PushPlus 配置 ---
+                if (forwardType == _forwardTypePushPlus) ...[
+                  TextField(
+                    controller: ppTokenCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'PushPlus Token（必填）',
+                      hintText: '在 pushplus.plus 官网获取',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: ppTopicCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'topic（群组编码，选填）',
+                      hintText: 'PushPlus群组编码，用于群发',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: ppToCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'to（好友令牌，选填）',
+                      hintText: '多个令牌用英文逗号分隔',
+                    ),
+                  ),
+                ],
+                // --- 短信发送 配置 ---
+                if (forwardType == _forwardTypeSms)
+                  TextField(
+                    controller: smsTargetCtrl,
+                    keyboardType: TextInputType.phone,
+                    decoration: const InputDecoration(
+                      labelText: '目标号码（必填）',
+                      hintText: '短信将转发到此号码',
+                    ),
+                  ),
+                // --- 钉钉群 配置 ---
+                if (forwardType == _forwardTypeDingTalk)
+                  TextField(
+                    controller: dtTokenCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Access Token（必填）',
+                      hintText: '钉钉群机器人的 access_token',
+                    ),
+                  ),
               ],
             ),
           ),
@@ -596,6 +770,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   keyword: keyCtrl.text.trim(),
                   numberMatchType: numberMatchType,
                   keywordMatchType: keywordMatchType,
+                  forwardType: forwardType,
+                  pushPlusToken: ppTokenCtrl.text.trim(),
+                  pushPlusTopic: ppTopicCtrl.text.trim(),
+                  pushPlusTo: ppToCtrl.text.trim(),
+                  smsTargetNumber: smsTargetCtrl.text.trim(),
+                  dingTalkAccessToken: dtTokenCtrl.text.trim(),
                 );
                 setState(() {
                   if (isEdit) {
@@ -615,35 +795,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
-  void _showTokenDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('PushPlus Token'),
-        content: TextField(
-          controller: _tokenController,
-          decoration: const InputDecoration(
-            labelText: '请输入 PushPlus Token',
-            hintText: '在 pushplus.plus 官网获取',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              _saveToken(_tokenController.text);
-              Navigator.pop(context);
-            },
-            child: const Text('保存'),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -651,14 +802,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         title: const Text('短信转发助手'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
-          IconButton(
-            icon: Icon(
-              Icons.key,
-              color: _pushToken.isEmpty ? Colors.orange : Colors.green,
-            ),
-            onPressed: _showTokenDialog,
-            tooltip: _pushToken.isEmpty ? "未配置Token" : "已配置Token",
-          ),
           IconButton(
             icon: Icon(
               _isServiceRunning ? Icons.stop_circle : Icons.play_circle_filled,
@@ -715,32 +858,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   TextButton(
                     onPressed: _openSmsSettings,
                     child: const Text("去设置", style: TextStyle(fontSize: 12)),
-                  ),
-                ],
-              ),
-            ),
-          if (_pushToken.isEmpty)
-            Container(
-              width: double.infinity,
-              color: Colors.orange.shade100,
-              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.warning_amber,
-                    color: Colors.orange,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 8),
-                  const Expanded(
-                    child: Text(
-                      "尚未配置 PushPlus Token，短信无法转发",
-                      style: TextStyle(fontSize: 12),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: _showTokenDialog,
-                    child: const Text("去配置", style: TextStyle(fontSize: 12)),
                   ),
                 ],
               ),
@@ -813,7 +930,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                       rule.targetNumber.isEmpty
                                           ? "监听号码: 所有号码"
                                           : "监听号码: ${rule.targetNumber}",
-                                      style: const TextStyle(fontSize: 15),
+                                      style: const TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.bold,
+                                      ),
                                     ),
                                     const SizedBox(height: 6),
                                     Text(
@@ -829,6 +949,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                           ? "关键词: 所有内容"
                                           : "关键词: ${rule.keyword}",
                                       style: const TextStyle(fontSize: 13),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      "转发方式: ${rule.forwardType}",
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w500,
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -846,7 +974,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                       size: 24,
                                     ),
                                   ),
-                                  const SizedBox(height: 12),
+                                  const SizedBox(height: 26),
                                   InkWell(
                                     onTap: () => _confirmDelete(index),
                                     child: const Icon(
