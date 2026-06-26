@@ -15,7 +15,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <application
-        android:label="sms_forwarder"
+        android:label="EZ短信转发助手"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <service

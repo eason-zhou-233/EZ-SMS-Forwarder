@@ -647,7 +647,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 // --- 监听号码 ---
                 TextField(
                   controller: numCtrl,
-                  decoration: const InputDecoration(labelText: '监听号码（留空匹配所有）'),
+                  decoration: const InputDecoration(labelText: '来源号码（留空匹配所有）'),
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
@@ -940,8 +940,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                   children: [
                                     Text(
                                       rule.targetNumber.isEmpty
-                                          ? "监听号码: 所有号码"
-                                          : "监听号码: ${rule.targetNumber}",
+                                          ? "来源号码: 所有号码"
+                                          : "来源号码: ${rule.targetNumber}",
                                       style: const TextStyle(
                                         fontSize: 15,
                                         fontWeight: FontWeight.bold,
