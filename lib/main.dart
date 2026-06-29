@@ -395,7 +395,13 @@ Future<void> _sendByEmail(
       debugPrint("转发跳过: 未配置全局SMTP");
       return;
     }
-    final smtpServer = SmtpServer(host, port: port, username: user, password: password, ssl: true);
+    final smtpServer = SmtpServer(
+      host,
+      port: port,
+      username: user,
+      password: password,
+      ssl: true,
+    );
     final message = mailer.Message()
       ..from = mailer.Address(user, 'EZ短信转发助手')
       ..recipients.add(rule.emailTarget)
@@ -678,7 +684,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             onPressed: () async {
               final prefs = await SharedPreferences.getInstance();
               await prefs.setString(_smtpKeyHost, hostCtrl.text.trim());
-              await prefs.setInt(_smtpKeyPort, int.tryParse(portCtrl.text.trim()) ?? 465);
+              await prefs.setInt(
+                _smtpKeyPort,
+                int.tryParse(portCtrl.text.trim()) ?? 465,
+              );
               await prefs.setString(_smtpKeyUser, userCtrl.text.trim());
               await prefs.setString(_smtpKeyPassword, passCtrl.text.trim());
               Navigator.pop(context);
@@ -792,6 +801,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final emailCtrl = TextEditingController(
       text: existingRule?.emailTarget ?? '',
     );
+    final smtpReady = _smtpConfigured;
 
     showDialog(
       context: context,
@@ -965,6 +975,28 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             ),
             ElevatedButton(
               onPressed: () {
+                // 验证必填项
+                String? error;
+                if (forwardType == _forwardTypePushPlus && ppTokenCtrl.text.trim().isEmpty) {
+                  error = '请填写 PushPlus Token';
+                } else if (forwardType == _forwardTypeSms && smsTargetCtrl.text.trim().isEmpty) {
+                  error = '请填写目标手机号';
+                } else if (forwardType == _forwardTypeDingTalk && dtTokenCtrl.text.trim().isEmpty) {
+                  error = '请填写 Access Token';
+                } else if (forwardType == _forwardTypeEmail) {
+                  if (!smtpReady) {
+                    error = '请先配置全局 SMTP 发件参数';
+                  } else if (emailCtrl.text.trim().isEmpty) {
+                    error = '请填写目标邮箱';
+                  }
+                }
+                if (error != null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(error), backgroundColor: Colors.red, duration: const Duration(seconds: 2)),
+                  );
+                  return;
+                }
+
                 final newRule = ForwardRule(
                   targetNumber: numCtrl.text.trim(),
                   keyword: keyCtrl.text.trim(),
