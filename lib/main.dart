@@ -395,6 +395,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _isServiceRunning = false;
   bool _smsPermissionGranted = false;
   bool _notificationPermissionGranted = false;
+  bool _showAutoStartTip = true;
 
   @override
   void initState() {
@@ -450,6 +451,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _checkServiceStatus();
       _checkBatteryOptimization();
       _loadRules();
+      _loadAutoStartTip();
     } catch (e) {
       debugPrint("初始化失败: $e");
     }
@@ -528,6 +530,22 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           const SnackBar(content: Text('保存规则失败'), backgroundColor: Colors.red),
         );
       }
+    }
+  }
+
+  Future<void> _loadAutoStartTip() async {
+    final prefs = await SharedPreferences.getInstance();
+    final dismissed = prefs.getBool('auto_start_tip_dismissed') ?? false;
+    if (mounted) {
+      setState(() => _showAutoStartTip = !dismissed);
+    }
+  }
+
+  Future<void> _dismissAutoStartTip() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('auto_start_tip_dismissed', true);
+    if (mounted) {
+      setState(() => _showAutoStartTip = false);
     }
   }
 
@@ -894,6 +912,30 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       _checkBatteryOptimization();
                     },
                     child: const Text("去设置"),
+                  ),
+                ],
+              ),
+            ),
+          if (_showAutoStartTip)
+            Container(
+              color: Colors.blue.shade50,
+              padding: const EdgeInsets.all(8),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline, color: Colors.blue, size: 20),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      "请确保已在系统设置中开启「自启动」权限，否则重启手机后服务无法自动恢复。",
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () async {
+                      await openAppSettings();
+                      _dismissAutoStartTip();
+                    },
+                    child: const Text("去设置", style: TextStyle(fontSize: 12)),
                   ),
                 ],
               ),
