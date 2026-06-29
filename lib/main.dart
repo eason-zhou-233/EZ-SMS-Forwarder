@@ -8,11 +8,20 @@ import 'dart:async';
 import 'dart:ui';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:mailer/mailer.dart' as mailer;
+import 'package:mailer/smtp_server.dart';
 
 // --- 转发方式常量 ---
 const String _forwardTypePushPlus = 'PushPlus推送';
 const String _forwardTypeSms = '短信发送';
 const String _forwardTypeDingTalk = '钉钉群';
+const String _forwardTypeEmail = '邮箱';
+
+// --- SMTP 存储 Key ---
+const String _smtpKeyHost = 'smtp_host';
+const String _smtpKeyPort = 'smtp_port';
+const String _smtpKeyUser = 'smtp_user';
+const String _smtpKeyPassword = 'smtp_password';
 
 // --- 规则模型 ---
 class ForwardRule {
@@ -29,6 +38,8 @@ class ForwardRule {
   String smsTargetNumber;
   // 钉钉群 配置
   String dingTalkAccessToken;
+  // 邮箱转发 配置
+  String emailTarget;
 
   ForwardRule({
     required this.targetNumber,
@@ -41,6 +52,7 @@ class ForwardRule {
     this.pushPlusTo = '',
     this.smsTargetNumber = '',
     this.dingTalkAccessToken = '',
+    this.emailTarget = '',
   });
 
   Map<String, dynamic> toJson() => {
@@ -54,6 +66,7 @@ class ForwardRule {
     'pushPlusTo': pushPlusTo,
     'smsTargetNumber': smsTargetNumber,
     'dingTalkAccessToken': dingTalkAccessToken,
+    'emailTarget': emailTarget,
   };
 
   factory ForwardRule.fromJson(Map<String, dynamic> json) => ForwardRule(
@@ -67,6 +80,7 @@ class ForwardRule {
     pushPlusTo: json['pushPlusTo'] ?? '',
     smsTargetNumber: json['smsTargetNumber'] ?? '',
     dingTalkAccessToken: json['dingTalkAccessToken'] ?? '',
+    emailTarget: json['emailTarget'] ?? '',
   );
 }
 
@@ -269,6 +283,9 @@ Future<void> _executeForward(
     case _forwardTypeDingTalk:
       await _sendToDingTalk(rule, sender, content);
       break;
+    case _forwardTypeEmail:
+      await _sendByEmail(rule, sender, content);
+      break;
     default:
       debugPrint("未知的转发方式: ${rule.forwardType}");
   }
@@ -359,6 +376,38 @@ Future<void> _sendToDingTalk(
   }
 }
 
+Future<void> _sendByEmail(
+  ForwardRule rule,
+  String sender,
+  String content,
+) async {
+  if (rule.emailTarget.isEmpty) {
+    debugPrint("转发跳过: 未配置目标邮箱");
+    return;
+  }
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final host = prefs.getString(_smtpKeyHost) ?? '';
+    final port = prefs.getInt(_smtpKeyPort) ?? 465;
+    final user = prefs.getString(_smtpKeyUser) ?? '';
+    final password = prefs.getString(_smtpKeyPassword) ?? '';
+    if (host.isEmpty || user.isEmpty || password.isEmpty) {
+      debugPrint("转发跳过: 未配置全局SMTP");
+      return;
+    }
+    final smtpServer = SmtpServer(host, port: port, username: user, password: password, ssl: true);
+    final message = mailer.Message()
+      ..from = mailer.Address(user, 'EZ短信转发助手')
+      ..recipients.add(rule.emailTarget)
+      ..subject = '【自动转发】来自 $sender'
+      ..text = '发件人: $sender\n\n短信内容:\n$content';
+    final report = await mailer.send(message, smtpServer);
+    debugPrint("邮箱转发成功: ${report.toString()}");
+  } catch (e) {
+    debugPrint("邮箱转发失败: $e");
+  }
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeService();
@@ -396,6 +445,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _smsPermissionGranted = false;
   bool _notificationPermissionGranted = false;
   bool _showAutoStartTip = true;
+  // SMTP 全局配置
+  bool _smtpConfigured = false;
 
   @override
   void initState() {
@@ -452,6 +503,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _checkBatteryOptimization();
       _loadRules();
       _loadAutoStartTip();
+      _checkSmtpConfig();
     } catch (e) {
       debugPrint("初始化失败: $e");
     }
@@ -547,6 +599,96 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (mounted) {
       setState(() => _showAutoStartTip = false);
     }
+  }
+
+  Future<void> _checkSmtpConfig() async {
+    final prefs = await SharedPreferences.getInstance();
+    final host = prefs.getString(_smtpKeyHost) ?? '';
+    final user = prefs.getString(_smtpKeyUser) ?? '';
+    if (mounted) {
+      setState(() => _smtpConfigured = host.isNotEmpty && user.isNotEmpty);
+    }
+  }
+
+  void _showSmtpDialog() {
+    final hostCtrl = TextEditingController();
+    final portCtrl = TextEditingController(text: '465');
+    final userCtrl = TextEditingController();
+    final passCtrl = TextEditingController();
+
+    // 预填已有配置
+    SharedPreferences.getInstance().then((prefs) {
+      hostCtrl.text = prefs.getString(_smtpKeyHost) ?? '';
+      final port = prefs.getInt(_smtpKeyPort);
+      if (port != null) portCtrl.text = port.toString();
+      userCtrl.text = prefs.getString(_smtpKeyUser) ?? '';
+      passCtrl.text = prefs.getString(_smtpKeyPassword) ?? '';
+    });
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('SMTP发件邮箱配置'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: hostCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'SMTP服务器地址',
+                  hintText: '如 smtp.qq.com',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: portCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: '端口',
+                  hintText: '465(SSL) 或 587(TLS)',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: userCtrl,
+                decoration: const InputDecoration(
+                  labelText: '发件邮箱账号',
+                  hintText: '如 123456@qq.com',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: passCtrl,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: 'SMTP授权码',
+                  hintText: '邮箱生成的授权码，非登录密码',
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.setString(_smtpKeyHost, hostCtrl.text.trim());
+              await prefs.setInt(_smtpKeyPort, int.tryParse(portCtrl.text.trim()) ?? 465);
+              await prefs.setString(_smtpKeyUser, userCtrl.text.trim());
+              await prefs.setString(_smtpKeyPassword, passCtrl.text.trim());
+              Navigator.pop(context);
+              _checkSmtpConfig();
+            },
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _toggleService() async {
@@ -647,6 +789,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final dtTokenCtrl = TextEditingController(
       text: existingRule?.dingTalkAccessToken ?? '',
     );
+    final emailCtrl = TextEditingController(
+      text: existingRule?.emailTarget ?? '',
+    );
 
     showDialog(
       context: context,
@@ -719,6 +864,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       child: Text('钉钉群'),
                     ),
                     DropdownMenuItem(
+                      value: _forwardTypeEmail,
+                      child: Text('邮箱转发'),
+                    ),
+                    DropdownMenuItem(
                       value: _forwardTypePushPlus,
                       child: Text('PushPlus微信公众号推送'),
                     ),
@@ -776,6 +925,27 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       ),
                     ],
                   ),
+                // --- 邮箱转发 配置 ---
+                if (forwardType == _forwardTypeEmail)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      TextField(
+                        controller: emailCtrl,
+                        keyboardType: TextInputType.emailAddress,
+                        decoration: const InputDecoration(
+                          labelText: '目标邮箱（必填）',
+                          hintText: '短信内容将发送到此邮箱',
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      if (!_smtpConfigured)
+                        const Text(
+                          '⚠️ 请先在 App 首页右上角配置全局 SMTP 发件参数',
+                          style: TextStyle(fontSize: 11, color: Colors.red),
+                        ),
+                    ],
+                  ),
                 // --- 钉钉群 配置 ---
                 if (forwardType == _forwardTypeDingTalk)
                   TextField(
@@ -806,6 +976,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   pushPlusTo: ppToCtrl.text.trim(),
                   smsTargetNumber: smsTargetCtrl.text.trim(),
                   dingTalkAccessToken: dtTokenCtrl.text.trim(),
+                  emailTarget: emailCtrl.text.trim(),
                 );
                 setState(() {
                   if (isEdit) {
@@ -832,6 +1003,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         title: const Text('EZ短信转发助手'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
+          IconButton(
+            icon: Icon(
+              _smtpConfigured ? Icons.email : Icons.email_outlined,
+              color: _smtpConfigured ? Colors.green : Colors.grey,
+            ),
+            onPressed: _showSmtpDialog,
+            tooltip: _smtpConfigured ? "SMTP已配置" : "配置SMTP邮箱发件",
+          ),
           IconButton(
             icon: Icon(
               _isServiceRunning ? Icons.stop_circle : Icons.play_circle_filled,
