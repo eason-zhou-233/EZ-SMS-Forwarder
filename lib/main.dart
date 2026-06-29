@@ -682,6 +682,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ),
           ElevatedButton(
             onPressed: () async {
+              final navigator = Navigator.of(context);
               final prefs = await SharedPreferences.getInstance();
               await prefs.setString(_smtpKeyHost, hostCtrl.text.trim());
               await prefs.setInt(
@@ -690,7 +691,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               );
               await prefs.setString(_smtpKeyUser, userCtrl.text.trim());
               await prefs.setString(_smtpKeyPassword, passCtrl.text.trim());
-              Navigator.pop(context);
+              navigator.pop();
               _checkSmtpConfig();
             },
             child: const Text('保存'),
@@ -977,11 +978,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               onPressed: () {
                 // 验证必填项
                 String? error;
-                if (forwardType == _forwardTypePushPlus && ppTokenCtrl.text.trim().isEmpty) {
+                if (forwardType == _forwardTypePushPlus &&
+                    ppTokenCtrl.text.trim().isEmpty) {
                   error = '请填写 PushPlus Token';
-                } else if (forwardType == _forwardTypeSms && smsTargetCtrl.text.trim().isEmpty) {
+                } else if (forwardType == _forwardTypeSms &&
+                    smsTargetCtrl.text.trim().isEmpty) {
                   error = '请填写目标手机号';
-                } else if (forwardType == _forwardTypeDingTalk && dtTokenCtrl.text.trim().isEmpty) {
+                } else if (forwardType == _forwardTypeDingTalk &&
+                    dtTokenCtrl.text.trim().isEmpty) {
                   error = '请填写 Access Token';
                 } else if (forwardType == _forwardTypeEmail) {
                   if (!smtpReady) {
@@ -992,7 +996,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 }
                 if (error != null) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(error), backgroundColor: Colors.red, duration: const Duration(seconds: 2)),
+                    SnackBar(
+                      content: Text(error),
+                      backgroundColor: Colors.red,
+                      duration: const Duration(seconds: 2),
+                    ),
                   );
                   return;
                 }
