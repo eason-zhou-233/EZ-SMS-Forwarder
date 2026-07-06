@@ -5,6 +5,18 @@ allprojects {
     }
 }
 
+subprojects {
+    afterEvaluate {
+        extensions.findByType<JavaPluginExtension>()?.apply {
+            sourceCompatibility = JavaVersion.VERSION_21
+            targetCompatibility = JavaVersion.VERSION_21
+        }
+        tasks.withType<JavaCompile>().configureEach {
+            options.compilerArgs.add("-Xlint:-options")
+        }
+    }
+}
+
 val newBuildDir: Directory =
     rootProject.layout.buildDirectory
         .dir("../../build")
