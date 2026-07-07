@@ -469,6 +469,7 @@ class SmsForwardService : Service() {
     // =================== 规则加载 ===================
 
     data class ForwardRule(
+        val name: String = "",
         val targetNumber: String = "",
         val keyword: String = "",
         val numberMatchType: String = "精确匹配",
@@ -514,6 +515,7 @@ class SmsForwardService : Service() {
                 val itemStr = arr.getString(i)
                 val obj = JSONObject(itemStr)
                 ForwardRule(
+                    name = obj.optString("name", ""),
                     targetNumber = obj.optString("targetNumber", ""),
                     keyword = obj.optString("keyword", ""),
                     numberMatchType = obj.optString("numberMatchType", "精确匹配"),

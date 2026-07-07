@@ -18,6 +18,7 @@ const String _smtpKeyPassword = 'smtp_password';
 
 // --- 规则模型 ---
 class ForwardRule {
+  String name;
   String targetNumber;
   String keyword;
   String numberMatchType;
@@ -36,6 +37,7 @@ class ForwardRule {
   String emailTarget;
 
   ForwardRule({
+    this.name = '',
     required this.targetNumber,
     required this.keyword,
     this.numberMatchType = '精确匹配',
@@ -51,6 +53,7 @@ class ForwardRule {
   });
 
   Map<String, dynamic> toJson() => {
+    'name': name,
     'targetNumber': targetNumber,
     'keyword': keyword,
     'numberMatchType': numberMatchType,
@@ -66,6 +69,7 @@ class ForwardRule {
   };
 
   factory ForwardRule.fromJson(Map<String, dynamic> json) => ForwardRule(
+    name: json['name'] ?? '',
     targetNumber: json['targetNumber'] ?? '',
     keyword: json['keyword'] ?? '',
     numberMatchType: json['numberMatchType'] ?? '精确匹配',
@@ -449,6 +453,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final isEdit = editIndex != null;
     final existingRule = isEdit ? _rules[editIndex] : null;
 
+    final nameCtrl = TextEditingController(text: existingRule?.name ?? '');
     final numCtrl = TextEditingController(
       text: existingRule?.targetNumber ?? '',
     );
@@ -492,6 +497,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // --- 规则名称 ---
+                TextField(
+                  controller: nameCtrl,
+                  decoration: const InputDecoration(
+                    labelText: '规则名称（选填）',
+                    hintText: '如：银行验证码、快递通知',
+                  ),
+                ),
+                const SizedBox(height: 12),
                 // --- 监听号码 ---
                 Row(
                   children: [
@@ -717,6 +731,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 }
 
                 final newRule = ForwardRule(
+                  name: nameCtrl.text.trim(),
                   targetNumber: numCtrl.text.trim(),
                   keyword: keyCtrl.text.trim(),
                   numberMatchType: numberMatchType,
@@ -952,6 +967,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                       ],
                                     ),
                                     const SizedBox(height: 6),
+                                    Text(
+                                      "规则名称: ${rule.name.isEmpty ? '未设置' : rule.name}",
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: rule.name.isEmpty
+                                            ? Colors.grey
+                                            : null,
+                                      ),
+                                    ),
                                     Text(
                                       "号码匹配规则: ${rule.numberMatchType}",
                                       style: const TextStyle(fontSize: 13),
