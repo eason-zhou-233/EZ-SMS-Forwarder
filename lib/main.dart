@@ -23,6 +23,7 @@ class ForwardRule {
   String numberMatchType;
   String keywordMatchType;
   String forwardType; // 转发方式
+  bool enabled; // 是否启用
   // PushPlus 配置
   String pushPlusToken;
   String pushPlusTopic;
@@ -40,6 +41,7 @@ class ForwardRule {
     this.numberMatchType = '精确匹配',
     this.keywordMatchType = '包含',
     this.forwardType = _forwardTypeDingTalk,
+    this.enabled = true,
     this.pushPlusToken = '',
     this.pushPlusTopic = '',
     this.pushPlusTo = '',
@@ -54,6 +56,7 @@ class ForwardRule {
     'numberMatchType': numberMatchType,
     'keywordMatchType': keywordMatchType,
     'forwardType': forwardType,
+    'enabled': enabled,
     'pushPlusToken': pushPlusToken,
     'pushPlusTopic': pushPlusTopic,
     'pushPlusTo': pushPlusTo,
@@ -68,6 +71,7 @@ class ForwardRule {
     numberMatchType: json['numberMatchType'] ?? '精确匹配',
     keywordMatchType: json['keywordMatchType'] ?? '包含',
     forwardType: json['forwardType'] ?? _forwardTypeDingTalk,
+    enabled: json['enabled'] ?? true,
     pushPlusToken: json['pushPlusToken'] ?? '',
     pushPlusTopic: json['pushPlusTopic'] ?? '',
     pushPlusTo: json['pushPlusTo'] ?? '',
@@ -856,6 +860,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           horizontal: 16,
                           vertical: 8,
                         ),
+                        color: rule.enabled ? Colors.green.shade50 : Colors.grey.shade100,
                         child: Padding(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 16,
@@ -868,14 +873,37 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(
-                                      rule.targetNumber.isEmpty
-                                          ? "来源号码: 所有号码"
-                                          : "来源号码: ${rule.targetNumber}",
-                                      style: const TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.bold,
-                                      ),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            rule.targetNumber.isEmpty
+                                                ? "来源号码: 所有号码"
+                                                : "来源号码: ${rule.targetNumber}",
+                                            style: TextStyle(
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.bold,
+                                              color: rule.enabled ? null : Colors.grey,
+                                            ),
+                                          ),
+                                        ),
+                                        if (!rule.enabled)
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: Colors.orange.shade100,
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                            ),
+                                            child: const Text(
+                                              '已暂停',
+                                              style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: Colors.orange),
+                                            ),
+                                          ),
+                                      ],
                                     ),
                                     const SizedBox(height: 6),
                                     Text(
@@ -907,6 +935,25 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                               Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
+                                  // 暂停/启用切换
+                                  InkWell(
+                                    onTap: () {
+                                      setState(() {
+                                        rule.enabled = !rule.enabled;
+                                      });
+                                      _saveRules();
+                                    },
+                                    child: Icon(
+                                      rule.enabled
+                                          ? Icons.pause_circle_outline
+                                          : Icons.play_circle_outline,
+                                      color: rule.enabled
+                                          ? Colors.orange
+                                          : Colors.green,
+                                      size: 24,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
                                   InkWell(
                                     onTap: () =>
                                         _showRuleDialog(editIndex: index),
@@ -916,7 +963,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                       size: 24,
                                     ),
                                   ),
-                                  const SizedBox(height: 26),
+                                  const SizedBox(height: 8),
                                   InkWell(
                                     onTap: () => _confirmDelete(index),
                                     child: const Icon(

@@ -194,7 +194,11 @@ class SmsForwardService : Service() {
 
         Log.d(TAG, "STEP2: 开始匹配规则...")
         for ((index, rule) in rules.withIndex()) {
-            Log.d(TAG, "STEP2: 匹配第 $index 条规则: 号码=${rule.targetNumber}, 关键词=${rule.keyword}, 方式=${rule.forwardType}")
+            Log.d(TAG, "STEP2: 匹配第 $index 条规则: 号码=${rule.targetNumber}, 关键词=${rule.keyword}, 方式=${rule.forwardType}, 启用=${rule.enabled}")
+            if (!rule.enabled) {
+                Log.d(TAG, "STEP2: 规则已暂停，跳过")
+                continue
+            }
             try {
                 val numberMatch = isMatch(normalizePhone(sender), normalizePhone(rule.targetNumber), rule.numberMatchType)
                 val keywordMatch = isMatch(body, rule.keyword, rule.keywordMatchType)
@@ -470,6 +474,7 @@ class SmsForwardService : Service() {
         val numberMatchType: String = "精确匹配",
         val keywordMatchType: String = "包含",
         val forwardType: String = "钉钉群",
+        val enabled: Boolean = true,
         val pushPlusToken: String = "",
         val pushPlusTopic: String = "",
         val pushPlusTo: String = "",
@@ -514,6 +519,7 @@ class SmsForwardService : Service() {
                     numberMatchType = obj.optString("numberMatchType", "精确匹配"),
                     keywordMatchType = obj.optString("keywordMatchType", "包含"),
                     forwardType = obj.optString("forwardType", "钉钉群"),
+                    enabled = obj.optBoolean("enabled", true),
                     pushPlusToken = obj.optString("pushPlusToken", ""),
                     pushPlusTopic = obj.optString("pushPlusTopic", ""),
                     pushPlusTo = obj.optString("pushPlusTo", ""),
