@@ -18,19 +18,31 @@
         android:label="EZ短信转发助手"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <!-- ====== 原生 SMS 转发前台服务 ====== -->
         <service
-            android:name="id.flutter.flutter_background_service.BackgroundService"
+            android:name="com.example.sms_forwarder.SmsForwardService"
             android:foregroundServiceType="specialUse|dataSync"
-            android:exported="false"
-            tools:replace="android:exported" />
-        <receiver 
-            android:name="com.shounakmulay.telephony.sms.IncomingSmsReceiver"
+            android:exported="false" />
+
+        <!-- ====== 短信广播接收器（静态注册，确保始终接收） ====== -->
+        <receiver
+            android:name="com.example.sms_forwarder.SmsBroadcastReceiver"
             android:permission="android.permission.BROADCAST_SMS"
             android:exported="true">
-            <intent-filter>
+            <intent-filter android:priority="999">
                 <action android:name="android.provider.Telephony.SMS_RECEIVED" />
             </intent-filter>
         </receiver>
+
+        <!-- ====== 开机自启接收器 ====== -->
+        <receiver
+            android:name="com.example.sms_forwarder.BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

@@ -1,15 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:another_telephony/telephony.dart';
-import 'package:http/http.dart' as http;
 import 'package:permission_handler/permission_handler.dart';
 import 'dart:convert';
-import 'dart:async';
-import 'dart:ui';
-import 'package:flutter_background_service/flutter_background_service.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:mailer/mailer.dart' as mailer;
-import 'package:mailer/smtp_server.dart';
+import 'native_service_bridge.dart';
 
 // --- 转发方式常量 ---
 const String _forwardTypePushPlus = 'PushPlus推送';
@@ -84,339 +77,16 @@ class ForwardRule {
   );
 }
 
-// ------------------- 后台通知插件（单次初始化） -------------------
-FlutterLocalNotificationsPlugin? _bgFlutterLocalNotificationsPlugin;
-
-Future<void> _ensureBgNotificationsInitialized() async {
-  if (_bgFlutterLocalNotificationsPlugin != null) return;
-  _bgFlutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
-  const AndroidInitializationSettings androidSettings =
-      AndroidInitializationSettings('@mipmap/ic_launcher');
-  const InitializationSettings settings = InitializationSettings(
-    android: androidSettings,
-  );
-  await _bgFlutterLocalNotificationsPlugin!.initialize(settings: settings);
-}
-
-// ------------------- 后台服务初始化 -------------------
-
-Future<void> initializeService() async {
-  final service = FlutterBackgroundService();
-
-  const AndroidNotificationChannel channel = AndroidNotificationChannel(
-    'forward_service_channel',
-    '短信转发监控',
-    description: '此通知确保转发服务在后台持续运行',
-    importance: Importance.low,
-  );
-
-  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
-      FlutterLocalNotificationsPlugin();
-
-  await flutterLocalNotificationsPlugin
-      .resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin
-      >()
-      ?.createNotificationChannel(channel);
-
-  await service.configure(
-    androidConfiguration: AndroidConfiguration(
-      onStart: onStart,
-      autoStart: true,
-      isForegroundMode: true,
-      notificationChannelId: 'forward_service_channel',
-      initialNotificationTitle: 'EZ短信转发助手',
-      initialNotificationContent: '服务启动中...',
-      foregroundServiceNotificationId: 888,
-      foregroundServiceTypes: [
-        AndroidForegroundType.specialUse,
-        AndroidForegroundType.dataSync,
-      ],
-    ),
-    iosConfiguration: IosConfiguration(
-      autoStart: true,
-      onForeground: onStart,
-      onBackground: onIosBackground,
-    ),
-  );
-}
-
-@pragma('vm:entry-point')
-Future<bool> onIosBackground(ServiceInstance service) async => true;
-
-@pragma('vm:entry-point')
-void onStart(ServiceInstance service) async {
-  DartPluginRegistrant.ensureInitialized();
-
-  WidgetsFlutterBinding.ensureInitialized();
-
-  // 在 onStart 中一次性初始化通知插件
-  await _ensureBgNotificationsInitialized();
-
-  final Telephony telephony = Telephony.instance;
-
-  telephony.listenIncomingSms(
-    onNewMessage: (msg) => processSms(msg),
-    onBackgroundMessage: backHandler,
-  );
-
-  service.on('stopService').listen((event) {
-    service.stopSelf();
-  });
-
-  Timer.periodic(const Duration(seconds: 10), (timer) async {
-    if (service is AndroidServiceInstance) {
-      if (await service.isForegroundService()) {
-        service.setForegroundNotificationInfo(
-          title: "EZ短信转发助手",
-          content: "正在后台运行...",
-        );
-      }
-    }
-  });
-}
-
-@pragma('vm:entry-point')
-Future<void> backHandler(SmsMessage message) async {
-  WidgetsFlutterBinding.ensureInitialized();
-  DartPluginRegistrant.ensureInitialized();
-  await processSms(message);
-}
-
-// ------------------- 核心转发逻辑 -------------------
-
-/// 标准化手机号码：去掉国际区号(+86等)、空格、短横线等
-String _normalizePhone(String phone) {
-  // 去掉所有空格、短横线、括号
-  var result = phone.replaceAll(RegExp(r'[\s\-\(\)]'), '');
-  // 去掉国际区号前缀：先去掉 + 号，再去掉已知的中国区号 86
-  if (result.startsWith('+')) {
-    result = result.substring(1);
-  }
-  if (result.startsWith('86')) {
-    result = result.substring(2);
-  }
-  return result;
-}
-
-bool _isMatch(String fullText, String pattern, String type) {
-  if (pattern.isEmpty) return true;
-  final text = fullText.trim();
-  final p = pattern.trim();
-  switch (type) {
-    case '精确匹配':
-      return text == p;
-    case '以此开头':
-      return text.startsWith(p);
-    case '以此结尾':
-      return text.endsWith(p);
-    case '包含':
-    default:
-      return text.contains(p);
-  }
-}
-
-Future<void> processSms(SmsMessage message) async {
-  await _ensureBgNotificationsInitialized();
-
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.reload();
-
-  final List<String> rulesJson = prefs.getStringList('forward_rules') ?? [];
-  final sender = message.address ?? '';
-  final content = message.body ?? '';
-
-  // 标准化后的号码，用于号码比较
-  final normalizedSender = _normalizePhone(sender);
-
-  debugPrint('========== 短信匹配日志 ==========');
-  debugPrint('原始发件人: "$sender"');
-  debugPrint('标准化发件人: "$normalizedSender"');
-  debugPrint('短信内容: "$content"');
-  debugPrint('当前规则数: ${rulesJson.length}');
-
-  for (String ruleStr in rulesJson) {
-    final rule = ForwardRule.fromJson(jsonDecode(ruleStr));
-    final normalizedTarget = _normalizePhone(rule.targetNumber);
-
-    debugPrint('---');
-    debugPrint('规则-原始号码: "${rule.targetNumber}"');
-    debugPrint('规则-标准化号码: "$normalizedTarget"');
-    debugPrint('规则-号码匹配模式: ${rule.numberMatchType}');
-    debugPrint('规则-关键词: "${rule.keyword}"');
-    debugPrint('规则-关键词匹配模式: ${rule.keywordMatchType}');
-    debugPrint('规则-转发方式: ${rule.forwardType}');
-
-    final numberMatch = _isMatch(
-      normalizedSender,
-      normalizedTarget,
-      rule.numberMatchType,
-    );
-    final keywordMatch = _isMatch(content, rule.keyword, rule.keywordMatchType);
-
-    debugPrint('号码匹配结果: $numberMatch');
-    debugPrint('关键词匹配结果: $keywordMatch');
-
-    if (numberMatch && keywordMatch) {
-      debugPrint('>>> 规则匹配成功，开始转发: ${rule.forwardType} <<<');
-      await _executeForward(rule, sender, content);
-      debugPrint('==================================');
-      return;
-    }
-  }
-  debugPrint('>>> 无匹配规则，未转发 <<<');
-  debugPrint('==================================');
-}
-
-Future<void> _executeForward(
-  ForwardRule rule,
-  String sender,
-  String content,
-) async {
-  switch (rule.forwardType) {
-    case _forwardTypePushPlus:
-      await _sendToPushPlus(rule, sender, content);
-      break;
-    case _forwardTypeSms:
-      await _sendBySms(rule, sender, content);
-      break;
-    case _forwardTypeDingTalk:
-      await _sendToDingTalk(rule, sender, content);
-      break;
-    case _forwardTypeEmail:
-      await _sendByEmail(rule, sender, content);
-      break;
-    default:
-      debugPrint("未知的转发方式: ${rule.forwardType}");
-  }
-}
-
-Future<void> _sendToPushPlus(
-  ForwardRule rule,
-  String sender,
-  String content,
-) async {
-  if (rule.pushPlusToken.isEmpty) {
-    debugPrint("转发跳过: 未配置 PushPlus Token");
-    return;
-  }
-  try {
-    final body = <String, dynamic>{
-      'token': rule.pushPlusToken,
-      'title': '【验证码】来自 $sender',
-      'content': content,
-      'channel': "wechat",
-    };
-    if (rule.pushPlusTopic.isNotEmpty) {
-      body['topic'] = rule.pushPlusTopic;
-    }
-    if (rule.pushPlusTo.isNotEmpty) {
-      body['to'] = rule.pushPlusTo;
-    }
-    final response = await http
-        .post(
-          Uri.parse('https://www.pushplus.plus/send'),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode(body),
-        )
-        .timeout(const Duration(seconds: 10));
-    debugPrint("PushPlus转发成功: ${response.body}");
-  } catch (e) {
-    debugPrint("PushPlus转发失败: $e");
-  }
-}
-
-Future<void> _sendBySms(ForwardRule rule, String sender, String content) async {
-  if (rule.smsTargetNumber.isEmpty) {
-    debugPrint("转发跳过: 未配置短信目标号码");
-    return;
-  }
-  try {
-    await Telephony.instance.sendSms(
-      to: rule.smsTargetNumber,
-      message: '【验证码】来自 $sender\n$content',
-    );
-    debugPrint("短信转发已发送");
-  } catch (e) {
-    debugPrint("短信转发失败: $e");
-  }
-}
-
-Future<void> _sendToDingTalk(
-  ForwardRule rule,
-  String sender,
-  String content,
-) async {
-  if (rule.dingTalkAccessToken.isEmpty) {
-    debugPrint("转发跳过: 未配置钉钉 Access Token");
-    return;
-  }
-  try {
-    final url = Uri.parse(
-      'https://oapi.dingtalk.com/robot/send?access_token=${rule.dingTalkAccessToken}',
-    );
-    final title = '短信转发 - 来自 $sender';
-    final text =
-        '**【验证码】**  \n'
-        '**发件人：** $sender  \n'
-        '**内容：** $content';
-    final response = await http
-        .post(
-          url,
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({
-            'msgtype': 'markdown',
-            'markdown': {'title': title, 'text': text},
-          }),
-        )
-        .timeout(const Duration(seconds: 10));
-    debugPrint("钉钉转发成功: ${response.body}");
-  } catch (e) {
-    debugPrint("钉钉转发失败: $e");
-  }
-}
-
-Future<void> _sendByEmail(
-  ForwardRule rule,
-  String sender,
-  String content,
-) async {
-  if (rule.emailTarget.isEmpty) {
-    debugPrint("转发跳过: 未配置目标邮箱");
-    return;
-  }
-  try {
-    final prefs = await SharedPreferences.getInstance();
-    final host = prefs.getString(_smtpKeyHost) ?? '';
-    final port = prefs.getInt(_smtpKeyPort) ?? 465;
-    final user = prefs.getString(_smtpKeyUser) ?? '';
-    final password = prefs.getString(_smtpKeyPassword) ?? '';
-    if (host.isEmpty || user.isEmpty || password.isEmpty) {
-      debugPrint("转发跳过: 未配置全局SMTP");
-      return;
-    }
-    final smtpServer = SmtpServer(
-      host,
-      port: port,
-      username: user,
-      password: password,
-      ssl: true,
-    );
-    final message = mailer.Message()
-      ..from = mailer.Address(user, 'EZ短信转发助手')
-      ..recipients.add(rule.emailTarget)
-      ..subject = '【自动转发】来自 $sender'
-      ..text = '发件人: $sender\n\n短信内容:\n$content';
-    final report = await mailer.send(message, smtpServer);
-    debugPrint("邮箱转发成功: ${report.toString()}");
-  } catch (e) {
-    debugPrint("邮箱转发失败: $e");
-  }
-}
+// ========================
+// 注意：SMS 监听、规则匹配、转发逻辑已全部迁移至
+// Android 原生 SmsForwardService (ForegroundService)
+// Flutter 端仅负责 UI 配置和通过 MethodChannel 控制服务
+// ========================
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await initializeService();
+  // 启动原生前台服务（内部会处理开机自启、划掉自恢复等）
+  await NativeServiceBridge.startService();
   runApp(const MyApp());
 }
 
@@ -500,10 +170,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _checkSmsPermission();
       _checkNotificationPermission();
 
-      Telephony.instance.listenIncomingSms(
-        onNewMessage: (msg) => processSms(msg),
-        onBackgroundMessage: backHandler,
-      );
+      // SMS 监听已由原生 SmsForwardService 负责，Flutter 端不再直接监听
 
       _checkServiceStatus();
       _checkBatteryOptimization();
@@ -517,7 +184,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Future<void> _checkServiceStatus() async {
     try {
-      final isRunning = await FlutterBackgroundService().isRunning();
+      final isRunning = await NativeServiceBridge.isServiceRunning();
       if (mounted) {
         setState(() {
           _isServiceRunning = isRunning;
@@ -525,6 +192,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       }
     } catch (e) {
       debugPrint("检查服务状态失败: $e");
+      // 回退：假设服务在运行
     }
   }
 
@@ -581,6 +249,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           .map((e) => jsonEncode(e.toJson()))
           .toList();
       await prefs.setStringList('forward_rules', rulesJson);
+      // 通知原生 Service 规则已更新
+      await NativeServiceBridge.notifyRulesUpdated();
     } catch (e) {
       debugPrint("保存规则失败: $e");
       if (mounted) {
@@ -703,11 +373,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Future<void> _toggleService() async {
     try {
-      final service = FlutterBackgroundService();
-      bool isRunning = await service.isRunning();
+      bool isRunning = await NativeServiceBridge.isServiceRunning();
 
       if (isRunning) {
-        service.invoke("stopService");
+        await NativeServiceBridge.stopService();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -718,7 +387,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           );
         }
       } else {
-        await service.startService();
+        await NativeServiceBridge.startService();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -884,7 +553,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     ),
                     DropdownMenuItem(
                       value: _forwardTypeSms,
-                      child: Text('短信发送'),
+                      child: Text('短信转发'),
                     ),
                   ],
                   onChanged: (val) => setDialogState(() => forwardType = val!),

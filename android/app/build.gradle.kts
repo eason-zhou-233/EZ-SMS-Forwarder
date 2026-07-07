@@ -10,6 +10,16 @@ android {
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
+    // 解决 JavaMail JAR 包中重复 META-INF 文件的冲突
+    packaging {
+        resources {
+            excludes += setOf(
+                "META-INF/NOTICE.md",
+                "META-INF/LICENSE.md",
+            )
+        }
+    }
+
     compileOptions {
         // 开启核心库脱糖
         isCoreLibraryDesugaringEnabled = true
@@ -67,4 +77,6 @@ subprojects {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+    // Kotlin 协程（用于原生 Service 异步转发）
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 }
