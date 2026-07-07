@@ -456,6 +456,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     String numberMatchType = existingRule?.numberMatchType ?? '精确匹配';
     String keywordMatchType = existingRule?.keywordMatchType ?? '包含';
     String forwardType = existingRule?.forwardType ?? _forwardTypeDingTalk;
+    final ruleEnabled = existingRule?.enabled ?? true;
     // 各转发方式的配置
     final ppTokenCtrl = TextEditingController(
       text: existingRule?.pushPlusToken ?? '',
@@ -492,9 +493,28 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 // --- 监听号码 ---
-                TextField(
-                  controller: numCtrl,
-                  decoration: const InputDecoration(labelText: '来源号码（留空匹配所有）'),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: numCtrl,
+                        decoration: const InputDecoration(
+                          labelText: '来源号码（留空匹配所有）',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      icon: const Icon(Icons.contacts_outlined, size: 22),
+                      tooltip: '从通讯录选择',
+                      onPressed: () async {
+                        final picked = await NativeServiceBridge.pickContact();
+                        if (picked != null && picked.isNotEmpty) {
+                          numCtrl.text = picked;
+                        }
+                      },
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
@@ -594,13 +614,31 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      TextField(
-                        controller: smsTargetCtrl,
-                        keyboardType: TextInputType.phone,
-                        decoration: const InputDecoration(
-                          labelText: '目标号码（必填）',
-                          hintText: '短信将转发到此号码',
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: smsTargetCtrl,
+                              keyboardType: TextInputType.phone,
+                              decoration: const InputDecoration(
+                                labelText: '目标号码（必填）',
+                                hintText: '短信将转发到此号码',
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            icon: const Icon(Icons.contacts_outlined, size: 22),
+                            tooltip: '从通讯录选择',
+                            onPressed: () async {
+                              final picked =
+                                  await NativeServiceBridge.pickContact();
+                              if (picked != null && picked.isNotEmpty) {
+                                smsTargetCtrl.text = picked;
+                              }
+                            },
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 6),
                       const Text(
@@ -684,6 +722,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   numberMatchType: numberMatchType,
                   keywordMatchType: keywordMatchType,
                   forwardType: forwardType,
+                  enabled: ruleEnabled,
                   pushPlusToken: ppTokenCtrl.text.trim(),
                   pushPlusTopic: ppTopicCtrl.text.trim(),
                   pushPlusTo: ppToCtrl.text.trim(),
@@ -860,7 +899,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           horizontal: 16,
                           vertical: 8,
                         ),
-                        color: rule.enabled ? Colors.green.shade50 : Colors.grey.shade100,
+                        color: rule.enabled
+                            ? Colors.green.shade50
+                            : Colors.grey.shade100,
                         child: Padding(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 16,
@@ -883,14 +924,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                             style: TextStyle(
                                               fontSize: 15,
                                               fontWeight: FontWeight.bold,
-                                              color: rule.enabled ? null : Colors.grey,
+                                              color: rule.enabled
+                                                  ? null
+                                                  : Colors.grey,
                                             ),
                                           ),
                                         ),
                                         if (!rule.enabled)
                                           Container(
                                             padding: const EdgeInsets.symmetric(
-                                                horizontal: 6, vertical: 2),
+                                              horizontal: 6,
+                                              vertical: 2,
+                                            ),
                                             decoration: BoxDecoration(
                                               color: Colors.orange.shade100,
                                               borderRadius:
@@ -899,8 +944,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                             child: const Text(
                                               '已暂停',
                                               style: TextStyle(
-                                                  fontSize: 11,
-                                                  color: Colors.orange),
+                                                fontSize: 11,
+                                                color: Colors.orange,
+                                              ),
                                             ),
                                           ),
                                       ],

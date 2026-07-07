@@ -4,8 +4,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// 原生后台服务通信层
 /// 通过 MethodChannel 与 Android 原生 SmsForwardService 通信
 class NativeServiceBridge {
-  static const MethodChannel _channel =
-      MethodChannel('com.example.sms_forwarder/service');
+  static const MethodChannel _channel = MethodChannel(
+    'com.example.sms_forwarder/service',
+  );
 
   /// 启动原生前台服务
   static Future<bool> startService() async {
@@ -45,6 +46,24 @@ class NativeServiceBridge {
     } catch (e) {
       // 忽略
     }
+  }
+
+  /// 打开系统通讯录选择联系人号码，返回已规范化的号码或 null
+  static Future<String?> pickContact() async {
+    try {
+      final result = await _channel.invokeMethod('pickContact');
+      if (result is String && result.isNotEmpty) {
+        return _normalizePhone(result);
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// 规范化号码：去掉空格、短横线、括号等格式字符
+  static String _normalizePhone(String phone) {
+    return phone.replaceAll(RegExp(r'[\s\-\(\)（）]'), '');
   }
 }
 
