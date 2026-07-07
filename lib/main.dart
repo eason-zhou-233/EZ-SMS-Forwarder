@@ -990,12 +990,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                           : "关键词: ${rule.keyword}",
                                       style: const TextStyle(fontSize: 13),
                                     ),
-                                    const SizedBox(height: 4),
+                                    // const SizedBox(height: 4),
                                     Text(
                                       "转发方式: ${rule.forwardType}",
                                       style: const TextStyle(
                                         fontSize: 13,
-                                        fontWeight: FontWeight.w500,
+                                        // fontWeight: FontWeight.w500,
                                       ),
                                     ),
                                   ],
