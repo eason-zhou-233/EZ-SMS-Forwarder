@@ -1,0 +1,66 @@
+00:00 +0: loading /private/tmp/ez_sms_audit/audit_widget_test.dart
+00:00 +0: (setUpAll)
+00:00 +0: normal portrait homepage
+00:00 +1: landscape with all permission banners
+══╡ EXCEPTION CAUGHT BY FLUTTER TEST FRAMEWORK ╞════════════════════════════════════════════════════
+The following TestFailure was thrown running a test:
+Expected: null
+  Actual: FlutterError:<A RenderFlex overflowed by 18 pixels on the bottom.>
+Homepage must fit with all setup banners
+
+When the exception was thrown, this was the stack:
+#4      main.<anonymous closure> (file:///private/tmp/ez_sms_audit/audit_widget_test.dart:67:5)
+<asynchronous suspension>
+#5      testWidgets.<anonymous closure>.<anonymous closure> (package:flutter_test/src/widget_tester.dart:192:15)
+<asynchronous suspension>
+#6      TestWidgetsFlutterBinding._runTestBody (package:flutter_test/src/binding.dart:1682:5)
+<asynchronous suspension>
+<asynchronous suspension>
+(elided one frame from package:stack_trace)
+
+This was caught by the test expectation on the following line:
+  file:///private/tmp/ez_sms_audit/audit_widget_test.dart line 67
+The test description was:
+  landscape with all permission banners
+════════════════════════════════════════════════════════════════════════════════════════════════════
+00:00 +1 -1: landscape with all permission banners [E]
+  Test failed. See exception logs above.
+  The test description was: landscape with all permission banners
+  
+00:00 +1 -1: narrow rule editor
+00:00 +2 -1: SMTP reports configured without password
+00:01 +3 -1: malformed rule hides existing good rule then overwrites storage
+加载规则失败: FormatException: Unexpected character (at character 2)
+{bad-json
+ ^
+
+00:01 +4 -1: failed service startup still announces startup
+00:01 +5 -1: service status remains stale after resume
+00:01 +6 -1: narrow rule editor with enlarged text
+══╡ EXCEPTION CAUGHT BY FLUTTER TEST FRAMEWORK ╞════════════════════════════════════════════════════
+The following TestFailure was thrown running a test:
+Expected: null
+  Actual: FlutterError:<A RenderFlex overflowed by 71 pixels on the right.>
+Rule editor should accommodate accessibility text scaling
+
+When the exception was thrown, this was the stack:
+#4      main.<anonymous closure> (file:///private/tmp/ez_sms_audit/audit_widget_test.dart:127:5)
+<asynchronous suspension>
+#5      testWidgets.<anonymous closure>.<anonymous closure> (package:flutter_test/src/widget_tester.dart:192:15)
+<asynchronous suspension>
+#6      TestWidgetsFlutterBinding._runTestBody (package:flutter_test/src/binding.dart:1682:5)
+<asynchronous suspension>
+<asynchronous suspension>
+(elided one frame from package:stack_trace)
+
+This was caught by the test expectation on the following line:
+  file:///private/tmp/ez_sms_audit/audit_widget_test.dart line 127
+The test description was:
+  narrow rule editor with enlarged text
+════════════════════════════════════════════════════════════════════════════════════════════════════
+00:01 +6 -2: narrow rule editor with enlarged text [E]
+  Test failed. See exception logs above.
+  The test description was: narrow rule editor with enlarged text
+  
+00:01 +6 -2: (tearDownAll)
+00:01 +6 -2: Some tests failed.

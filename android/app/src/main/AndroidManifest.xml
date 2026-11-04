@@ -9,11 +9,10 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <application
         android:label="EZ短信转发助手"
@@ -22,7 +21,8 @@
         <!-- ====== 原生 SMS 转发前台服务 ====== -->
         <service
             android:name="com.example.sms_forwarder.SmsForwardService"
-            android:foregroundServiceType="specialUse|dataSync"
+            android:foregroundServiceType="remoteMessaging"
+            android:stopWithTask="false"
             android:exported="false" />
 
         <!-- ====== 短信广播接收器（静态注册，确保始终接收） ====== -->

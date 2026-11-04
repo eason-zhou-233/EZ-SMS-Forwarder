@@ -93,8 +93,6 @@ class ForwardRule {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // 启动原生前台服务（内部会处理开机自启、划掉自恢复等）
-  await NativeServiceBridge.startService();
   runApp(const MyApp());
 }
 
@@ -126,6 +124,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   List<ForwardRule> _rules = [];
   bool _isBatteryOptimized = false;
   bool _isServiceRunning = false;
+  bool _isServiceChanging = false;
   bool _smsPermissionGranted = false;
   bool _notificationPermissionGranted = false;
   bool _showAutoStartTip = true;
@@ -152,6 +151,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _checkSmsPermission();
       _checkNotificationPermission();
       _checkBatteryOptimization();
+      _checkServiceStatus();
     }
   }
 
@@ -178,8 +178,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _checkSmsPermission();
       _checkNotificationPermission();
 
-      // SMS 监听已由原生 SmsForwardService 负责，Flutter 端不再直接监听
-
+      // 权限引导后恢复已启用的监控，避免覆盖用户主动停止的选择。
+      await NativeServiceBridge.ensureService();
       _checkServiceStatus();
       _checkBatteryOptimization();
       _loadRules();
@@ -380,45 +380,97 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _toggleService() async {
+    if (_isServiceChanging) return;
+    setState(() => _isServiceChanging = true);
     try {
-      bool isRunning = await NativeServiceBridge.isServiceRunning();
-
-      if (isRunning) {
-        await NativeServiceBridge.stopService();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text("正在停止后台服务"),
-              backgroundColor: Colors.redAccent,
-              duration: const Duration(seconds: 1),
-            ),
-          );
-        }
-      } else {
-        await NativeServiceBridge.startService();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text("正在启动后台服务"),
-              backgroundColor: Colors.green,
-              duration: const Duration(seconds: 1),
-            ),
-          );
-        }
-      }
-
-      await Future.delayed(const Duration(milliseconds: 500));
-      if (mounted) {
-        _checkServiceStatus();
-      }
+      final wasRunning = await NativeServiceBridge.isServiceRunning();
+      final accepted = wasRunning
+          ? await NativeServiceBridge.stopService()
+          : await NativeServiceBridge.startService();
+      if (!accepted) throw StateError('系统未接受操作，请点击状态栏查看运行记录');
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      final running = await NativeServiceBridge.isServiceRunning();
+      if (!mounted) return;
+      setState(() => _isServiceRunning = running);
+      final reachedTarget = running != wasRunning;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            reachedTarget
+                ? (running ? '后台监控已开启' : '后台监控已停止')
+                : '服务状态尚未确认，请点击状态栏查看运行记录',
+          ),
+          backgroundColor: reachedTarget ? null : Colors.orange,
+        ),
+      );
     } catch (e) {
-      debugPrint("切换服务失败: $e");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('操作失败: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('操作失败：$e'), backgroundColor: Colors.red),
+        );
+        await _checkServiceStatus();
+      }
+    } finally {
+      if (mounted) setState(() => _isServiceChanging = false);
+    }
+  }
+
+  Future<void> _showRuntimeDetails() async {
+    final details = await NativeServiceBridge.getDiagnostics();
+    if (!mounted) return;
+    String formatTime(String? value) {
+      final millis = int.tryParse(value ?? '');
+      if (millis == null || millis <= 0) return '暂无记录';
+      final date = DateTime.fromMillisecondsSinceEpoch(millis);
+      String pad(int value) => value.toString().padLeft(2, '0');
+      return '${date.year}-${pad(date.month)}-${pad(date.day)} '
+          '${pad(date.hour)}:${pad(date.minute)}:${pad(date.second)}';
+    }
+
+    String time(String key) => formatTime(details[key]);
+    final events = <String>[];
+    try {
+      final history = jsonDecode(details['recentEvents'] ?? '[]') as List;
+      for (final entry in history.reversed) {
+        events.add(
+          '${formatTime(entry['time'].toString())}  ${entry['message']}',
         );
       }
+    } catch (_) {
+      // 兼容没有历史记录的旧版本服务。
     }
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('后台运行记录'),
+        content: SingleChildScrollView(
+          child: SelectableText(
+            [
+              '本次服务启动：${time('startedAt')}',
+              '最近收到短信：${time('lastSmsAt')}',
+              '最近转发提交成功：${time('lastDeliveryAt')}',
+              '待转发：${details['pendingCount'] ?? '未知'} 条',
+              '',
+              '最近事件：${details['lastEvent'] ?? '暂无记录'}',
+              '事件时间：${time('lastEventAt')}',
+              '',
+              '上次进程退出：${details['lastExitReason'] ?? '系统暂无记录'}',
+              '退出时间：${time('lastExitAt')}',
+              '',
+              '小米手机请允许后台自启动，并将应用省电策略设为“无限制”。',
+              '网络任务最多尝试6次，超过30分钟不再补发。请求结果不确定时，补发可能重复。',
+              if (events.isNotEmpty) ...['', '最近运行记录（新到旧）：', ...events],
+            ].join('\n'),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('关闭'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _confirmDelete(int index) {
@@ -784,7 +836,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               color: _isServiceRunning ? Colors.red : Colors.green,
               size: 28,
             ),
-            onPressed: _toggleService,
+            onPressed: _isServiceChanging ? null : _toggleService,
             tooltip: _isServiceRunning ? "停止监控" : "开启监控",
           ),
         ],
@@ -886,19 +938,22 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 ],
               ),
             ),
-          Container(
-            width: double.infinity,
-            color: _isServiceRunning
-                ? Colors.green.shade50
-                : Colors.grey.shade200,
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Text(
-              _isServiceRunning ? "● 后台服务运行中" : "○ 后台服务已停止",
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: _isServiceRunning ? Colors.green : Colors.grey,
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
+          InkWell(
+            onTap: _showRuntimeDetails,
+            child: Container(
+              width: double.infinity,
+              color: _isServiceRunning
+                  ? Colors.green.shade50
+                  : Colors.grey.shade200,
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Text(
+                _isServiceRunning ? "● 后台服务运行中 · 点击查看记录" : "○ 后台服务已停止 · 点击查看记录",
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: _isServiceRunning ? Colors.green : Colors.grey,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
               ),
             ),
           ),

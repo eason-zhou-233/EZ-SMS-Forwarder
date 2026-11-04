@@ -1,0 +1,5 @@
+android/app/src/main/kotlin/com/example/sms_forwarder/MainActivity.kt:129:33: warning: 'fun getRunningServices(p0: Int): (MutableList<ActivityManager.RunningServiceInfo!>..List<ActivityManager.RunningServiceInfo!>?)' is deprecated. Deprecated in Java.
+        for (service in manager.getRunningServices(Integer.MAX_VALUE)) {
+                                ^^^^^^^^^^^^^^^^^^
+
+exit_code=0

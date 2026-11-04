@@ -1,0 +1,9 @@
+00:00 +0: loading /private/tmp/ez_sms_background_fix/background_widget_test.dart
+00:00 +0: (setUpAll)
+00:00 +0: home keeps existing rule layout
+00:00 +1: failed start does not report monitoring enabled
+00:00 +2: resume refreshes actual stopped state
+00:00 +3: state strip opens readable delivery and process exit records
+00:00 +4: concurrent toggles submit only one request
+00:00 +5: (tearDownAll)
+00:00 +5: All tests passed!

@@ -1,0 +1,7 @@
+PASS SMTP TLS authentication and long MIME body
+PASS trusted certificate with wrong hostname rejected before AUTH
+PASS SMTP 535 is permanent failure and socket closes
+PASS SMTP 421 is retryable and socket closes
+4 SMTP checks passed
+
+exit_code=0

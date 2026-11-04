@@ -1,0 +1,11 @@
+测试工作目录：/private/tmp/ez_sms_background_fix/build-project
+命令：flutter test --no-pub --reporter expanded
+以下为本次隔离测试的工具输出记录；test/widget_test.dart与原项目内容一致。
+
+00:00 +0: 首页启动使用恢复入口，不覆盖用户停用意图
+00:00 +1: 已保存的规则仍正常显示
+00:00 +2: 启动请求失败时不显示开启成功
+00:00 +3: 返回前台刷新实际已停止的服务状态
+00:00 +4: 点击状态条查看投递错误和进程退出记录
+00:00 +5: 连续点击只提交一次服务切换
+00:00 +6: All tests passed!

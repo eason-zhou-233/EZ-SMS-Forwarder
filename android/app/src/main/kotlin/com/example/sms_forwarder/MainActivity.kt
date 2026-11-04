@@ -60,13 +60,24 @@ class MainActivity : FlutterActivity() {
             when (call.method) {
                 "startService" -> {
                     Log.d(TAG, "Flutter 请求启动服务")
-                    startSmsForwardService()
-                    result.success(true)
+                    handleServiceStart(result, true)
+                }
+                "ensureService" -> {
+                    handleServiceStart(result, false)
+                }
+                "getDiagnostics" -> {
+                    result.success(SmsForwardService.diagnostics(this))
                 }
                 "stopService" -> {
                     Log.d(TAG, "Flutter 请求停止服务")
-                    stopSmsForwardService()
-                    result.success(true)
+                    try {
+                        SmsForwardService.setMonitoringEnabled(this, false)
+                        stopService(Intent(this, SmsForwardService::class.java))
+                        SmsForwardService.recordEvent(this, "监控已主动停止，待转发任务已清除")
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("SERVICE_STOP_FAILED", "停止监控失败", null)
+                    }
                 }
                 "isServiceRunning" -> {
                     result.success(isSmsForwardServiceRunning())
@@ -96,20 +107,21 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun startSmsForwardService() {
-        val intent = Intent(this, SmsForwardService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(intent)
-        } else {
-            startService(intent)
+    private fun handleServiceStart(result: MethodChannel.Result, userInitiated: Boolean) {
+        try {
+            if (userInitiated) SmsForwardService.setMonitoringEnabled(this, true)
+            if (!SmsForwardService.monitoringEnabled(this)) {
+                result.success(false)
+                return
+            }
+            val intent = Intent(this, SmsForwardService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent)
+            else startService(intent)
+            result.success(true)
+        } catch (e: Exception) {
+            SmsForwardService.recordEvent(this, "启动请求被拒绝：${e.javaClass.simpleName}")
+            result.error("SERVICE_START_FAILED", "系统未接受后台服务启动请求", null)
         }
-    }
-
-    private fun stopSmsForwardService() {
-        val intent = Intent(this, SmsForwardService::class.java).apply {
-            action = SmsForwardService.ACTION_STOP
-        }
-        startService(intent)
     }
 
     private fun isSmsForwardServiceRunning(): Boolean {

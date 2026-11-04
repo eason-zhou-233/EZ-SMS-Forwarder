@@ -14,8 +14,27 @@ class NativeServiceBridge {
       final result = await _channel.invokeMethod('startService');
       return result == true;
     } catch (e) {
-      // 忽略错误，服务可能已在运行
       return false;
+    }
+  }
+
+  /// 页面启动时恢复监控，尊重用户上次主动停止的选择。
+  static Future<bool> ensureService() async {
+    try {
+      return await _channel.invokeMethod('ensureService') == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<Map<String, String>> getDiagnostics() async {
+    try {
+      final result = await _channel.invokeMapMethod<String, String>(
+        'getDiagnostics',
+      );
+      return result ?? {};
+    } catch (_) {
+      return {'lastEvent': '暂时无法读取运行记录'};
     }
   }
 

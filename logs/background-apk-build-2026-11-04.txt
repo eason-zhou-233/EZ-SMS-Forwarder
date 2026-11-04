@@ -1,0 +1,41 @@
+Running Gradle task 'assembleDebug'...                          
+The message received from the daemon indicates that the daemon has disappeared.
+Build request sent: Build{id=d4f2b16f-48da-4f98-af74-6964f13dfb05, currentDir=/Users/zyc/Library/CloudStorage/OneDrive-个人/文档/个人开发/EZ-SMS-Forwarder/android}
+Attempting to read last messages from the daemon log...
+Daemon pid: 61208
+  log file: /Users/zyc/.gradle/daemon/8.14/daemon-61208.out.log
+----- Last 20 lines from daemon log file - daemon-61208.out.log -----
+2026-11-04T15:08:56.550+0800 [DEBUG] [org.gradle.launcher.daemon.server.DefaultDaemonConnection] thread 32: Received non-IO message from client: Build{id=d4f2b16f-48da-4f98-af74-6964f13dfb05, currentDir=/Users/zyc/Library/CloudStorage/OneDrive-个人/文档/个人开发/EZ-SMS-Forwarder/android}
+2026-11-04T15:08:56.551+0800 [INFO] [org.gradle.launcher.daemon.server.DefaultIncomingConnectionHandler] Received command: Build{id=d4f2b16f-48da-4f98-af74-6964f13dfb05, currentDir=/Users/zyc/Library/CloudStorage/OneDrive-个人/文档/个人开发/EZ-SMS-Forwarder/android}.
+2026-11-04T15:08:56.551+0800 [DEBUG] [org.gradle.launcher.daemon.server.DefaultIncomingConnectionHandler] Starting executing command: Build{id=d4f2b16f-48da-4f98-af74-6964f13dfb05, currentDir=/Users/zyc/Library/CloudStorage/OneDrive-个人/文档/个人开发/EZ-SMS-Forwarder/android} with connection: socket connection from /127.0.0.1:54062 to /127.0.0.1:54063.
+2026-11-04T15:08:56.552+0800 [DEBUG] [org.gradle.launcher.daemon.server.DaemonStateCoordinator] Command execution: started DaemonCommandExecution[command = Build{id=d4f2b16f-48da-4f98-af74-6964f13dfb05, currentDir=/Users/zyc/Library/CloudStorage/OneDrive-个人/文档/个人开发/EZ-SMS-Forwarder/android}, connection = DefaultDaemonConnection: socket connection from /127.0.0.1:54062 to /127.0.0.1:54063] after 6.0E-4 minutes of idle
+2026-11-04T15:08:56.552+0800 [INFO] [org.gradle.launcher.daemon.server.DaemonRegistryUpdater] Marking the daemon as busy, address: [1af01ee5-f684-43f5-9204-a21bb5f7ecb1 port:54062, addresses:[localhost/127.0.0.1]]
+2026-11-04T15:08:56.552+0800 [DEBUG] [org.gradle.launcher.daemon.registry.PersistentDaemonRegistry] Marking busy by address: [1af01ee5-f684-43f5-9204-a21bb5f7ecb1 port:54062, addresses:[localhost/127.0.0.1]]
+2026-11-04T15:08:56.552+0800 [DEBUG] [org.gradle.cache.internal.DefaultFileLockManager] Waiting to acquire exclusive lock on daemon addresses registry.
+2026-11-04T15:08:56.553+0800 [DEBUG] [org.gradle.cache.internal.DefaultFileLockManager] Lock acquired on daemon addresses registry.
+2026-11-04T15:08:56.553+0800 [DEBUG] [org.gradle.cache.internal.DefaultFileLockManager] Releasing lock on daemon addresses registry.
+2026-11-04T15:08:56.553+0800 [DEBUG] [org.gradle.launcher.daemon.server.DaemonStateCoordinator] resetting idle timer
+2026-11-04T15:08:56.553+0800 [DEBUG] [org.gradle.launcher.daemon.server.DaemonStateCoordinator] daemon is running. Sleeping until state changes.
+2026-11-04T15:08:56.553+0800 [INFO] [org.gradle.launcher.daemon.server.exec.StartBuildOrRespondWithBusy] Daemon is about to start building Build{id=d4f2b16f-48da-4f98-af74-6964f13dfb05, currentDir=/Users/zyc/Library/CloudStorage/OneDrive-个人/文档/个人开发/EZ-SMS-Forwarder/android}. Dispatching build started information...
+2026-11-04T15:08:56.554+0800 [DEBUG] [org.gradle.launcher.daemon.server.SynchronizedDispatchConnection] thread 34: dispatching org.gradle.launcher.daemon.protocol.BuildStarted@75d86dea
+2026-11-04T15:08:56.555+0800 [DEBUG] [org.gradle.launcher.daemon.server.exec.EstablishBuildEnvironment] Configuring env variables: [PATH, NO_PROXY, BROWSER_USE_ACCESS_VERIFYING_IDENTITY, https_proxy, CONDA_DEFAULT_ENV, GIT_PAGER, CODEX_MCP_NODE_PATH, CODEX_SHELL, CONDA_PYTHON_EXE, PUB_HOSTED_URL, ANDROID_HOME, CONDA_PREFIX, GH_PAGER, BROWSER_USE_ACCESS_EXECUTOR_ID, FPATH, CODEX_APP_TOOLS_PIPE_PATH, COLORTERM, SDKMAN_DIR, LOGNAME, CODEX_TASK_WORKSPACE_VERIFYING_IDENTITY, APP_ICON_61202, PWD, CODEX_APP_RUNTIME_CLI_PATH, INFOPATH, SDKMAN_BROKER_API, CODEX_INTERNAL_ORIGINATOR_OVERRIDE, CODEX_SAGE_BACKFILL_TRACKER_TAB_REUSE, SHELL, CODEX_SANDBOX_NETWORK_DISABLED, PAGER, SDKMAN_CANDIDATES_API, HOMEBREW_BOTTLE_DOMAIN, HOMEBREW_CELLAR, OLDPWD, CODEX_PERMISSION_PROFILE, TMPDIR, LOG_FORMAT, XPC_FLAGS, LC_ALL, BROWSER_USE_ACCESS_PIPE_PATH, __CF_USER_TEXT_ENCODING, CONDA_PROMPT_MODIFIER, ZSH_TMUX_AUTOSTARTED, FLUTTER_STORAGE_BASE_URL, LC_CTYPE, CODEX_SESSION_ID, SHLVL, MallocNanoZone, CONDA_EXE, JAVA_HOME, RUST_LOG, DASHCOPE_API_KEY, FLUTTER_ROOT, TERM, HOMEBREW_PREFIX, LANG, COMMAND_MODE, _CE_M, CODEX_APPLY_PATCH_PRESERVE_LINE_ENDINGS, IDEA_VM_OPTIONS, CODEX_THREAD_ID, HOMEBREW_REPOSITORY, NO_COLOR, XPC_SERVICE_NAME, CONDA_SHLVL, SDKMAN_CANDIDATES_DIR, CODEX_CI, http_proxy, DISABLE_AUTO_UPDATE, CODEX_TOOL_CALL_ID, SDKMAN_PLATFORM, ANDROID_SDK_ROOT, USER, ZSH_TMUX_AUTOSTART, SSH_AUTH_SOCK, OSLogRateLimit, _CE_CONDA, FLUTTER_ALREADY_LOCKED, CODEX_TECTONIC_PATH, CODEX_VERSION, HOME]
+2026-11-04T15:08:56.556+0800 [DEBUG] [org.gradle.launcher.daemon.server.exec.LogToClient] About to start relaying all logs to the client via the connection.
+2026-11-04T15:08:56.556+0800 [INFO] [org.gradle.launcher.daemon.server.exec.LogToClient] The client will now receive all logging from the daemon (pid: 61208). The daemon log file: /Users/zyc/.gradle/daemon/8.14/daemon-61208.out.log
+2026-11-04T15:08:56.557+0800 [INFO] [org.gradle.launcher.daemon.server.exec.LogAndCheckHealth] Starting build in new daemon [memory: 8 GiB]
+2026-11-04T15:08:56.558+0800 [DEBUG] [org.gradle.launcher.daemon.server.exec.ExecuteBuild] The daemon has started executing the build.
+2026-11-04T15:08:56.558+0800 [DEBUG] [org.gradle.launcher.daemon.server.exec.ExecuteBuild] Executing build with daemon context: DefaultDaemonContext[uid=5aca449a-8fd6-4fdc-8eae-f43fd7b13ecd,javaHome=/Applications/PyCharm.app/Contents/jbr/Contents/Home,javaVersion=21,javaVendor=JetBrains s.r.o.,daemonRegistryDir=/Users/zyc/.gradle/daemon,pid=61208,idleTimeout=10800000,priority=NORMAL,applyInstrumentationAgent=true,nativeServicesMode=ENABLED,daemonOpts=-XX:MaxMetaspaceSize=4G,-XX:ReservedCodeCacheSize=512m,-XX:+HeapDumpOnOutOfMemoryError,-Xmx8G,-Dfile.encoding=UTF-8,-Duser.country=CN,-Duser.language=zh,-Duser.variant]
+Daemon vm is shutting down... The daemon has exited normally or was terminated in response to a user interrupt.----- End of the daemon log -----
+
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Gradle build daemon disappeared unexpectedly (it may have been killed or may have crashed)
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+Running Gradle task 'assembleDebug'...                            268.7s
+Gradle task assembleDebug failed with exit code 1

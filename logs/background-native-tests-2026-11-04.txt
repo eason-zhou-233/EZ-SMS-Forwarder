@@ -1,0 +1,19 @@
+PASS UTF-8 message survives recreation
+PASS attempt and recipient snapshot are persisted before delivery
+PASS six attempt bound remains after repeated process recreation
+PASS expiry removes retained SMS and credentials from storage
+PASS failed persistence refuses to accept or claim a task
+PASS concurrent incoming messages do not overwrite each other
+PASS queue capacity does not delete an earlier task
+PASS confirmed completion removes only that message; stop clears all
+PASS retry intervals are bounded
+PASS PushPlus accepts business success
+PASS PushPlus invalid token is permanent failure
+PASS HTTP 503 schedules retry rather than reporting success
+PASS HTTP 429 schedules a bounded retry
+PASS HTTP 401 stops retrying
+PASS DingTalk business rejection is failure
+PASS DingTalk accepts business success
+16 checks passed
+
+exit_code=0
